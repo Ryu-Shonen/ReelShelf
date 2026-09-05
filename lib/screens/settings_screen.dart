@@ -461,7 +461,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const ListTile(
                   leading: Icon(Icons.movie_filter_rounded),
                   title: Text(
-                    'ReelShelf 0.2.0',
+                    'ReelShelf 0.3.0',
                     style: TextStyle(fontWeight: FontWeight.w800),
                   ),
                   subtitle:
@@ -479,6 +479,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
                 const Divider(height: 1),
+                const ListTile(
+                  leading: Icon(Icons.qr_code_2_rounded),
+                  title: Text(
+                    'Physische Ausgaben von UPCitemdb',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  subtitle: Text(
+                    'Barcode- und Produktsuche für Blu-rays, 4K UHDs, Sondereditionen und Boxsets.',
+                  ),
+                ),
+                const Divider(height: 1),
                 ListTile(
                   leading: const Icon(Icons.info_outline_rounded),
                   title: const Text('Open-Source-Lizenzen'),
@@ -486,7 +497,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onTap: () => showLicensePage(
                     context: context,
                     applicationName: 'ReelShelf',
-                    applicationVersion: '0.2.0',
+                    applicationVersion: '0.3.0',
                   ),
                 ),
               ],

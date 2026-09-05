@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 class BarcodeScannerScreen extends StatefulWidget {
@@ -11,14 +12,10 @@ class BarcodeScannerScreen extends StatefulWidget {
 class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
   final MobileScannerController _controller = MobileScannerController(
     detectionSpeed: DetectionSpeed.noDuplicates,
-    formats: const [
-      BarcodeFormat.ean13,
-      BarcodeFormat.ean8,
-      BarcodeFormat.upcA,
-      BarcodeFormat.upcE,
-      BarcodeFormat.code128,
-    ],
+    detectionTimeoutMs: 250,
+    autoZoom: true,
   );
+
   bool _handled = false;
 
   @override
@@ -27,17 +24,60 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
     super.dispose();
   }
 
-  void _onDetect(BarcodeCapture capture) {
+  Future<void> _onDetect(BarcodeCapture capture) async {
     if (_handled) return;
+
     for (final barcode in capture.barcodes) {
       final code = barcode.rawValue?.trim();
-      if (code != null && code.isNotEmpty) {
-        _handled = true;
-        _controller.stop();
-        Navigator.of(context).pop(code);
-        return;
-      }
+      if (code == null || code.isEmpty) continue;
+
+      _handled = true;
+      await HapticFeedback.mediumImpact();
+      await _controller.stop();
+
+      if (!mounted) return;
+      Navigator.of(context).pop(code);
+      return;
     }
+  }
+
+  Future<void> _enterManually() async {
+    final textController = TextEditingController();
+
+    final value = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('EAN / Barcode eingeben'),
+        content: TextField(
+          controller: textController,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          textInputAction: TextInputAction.done,
+          decoration: const InputDecoration(
+            labelText: 'EAN / UPC',
+            hintText: 'z. B. 0888750199799',
+          ),
+          onSubmitted: (value) =>
+              Navigator.of(context).pop(value.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.of(context).pop(textController.text.trim()),
+            child: const Text('Übernehmen'),
+          ),
+        ],
+      ),
+    );
+
+    textController.dispose();
+
+    if (!mounted || value == null || value.trim().isEmpty) return;
+    Navigator.of(context).pop(value.trim());
   }
 
   @override
@@ -63,24 +103,45 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          MobileScanner(controller: _controller, onDetect: _onDetect),
+          MobileScanner(
+            controller: _controller,
+            tapToFocus: true,
+            onDetect: _onDetect,
+          ),
           IgnorePointer(
             child: CustomPaint(painter: _ScannerOverlayPainter()),
           ),
           Positioned(
-            left: 24,
-            right: 24,
-            bottom: 48,
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.72),
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: const Text(
-                'Halte den EAN-Barcode auf der Filmhülle in den Rahmen. ReelShelf übernimmt die Nummer automatisch.',
-                textAlign: TextAlign.center,
-                style: TextStyle(height: 1.4),
+            left: 20,
+            right: 20,
+            bottom: 30,
+            child: SafeArea(
+              top: false,
+              child: Container(
+                padding: const EdgeInsets.all(15),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.76),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.08),
+                  ),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Halte den Barcode möglichst gerade in den Rahmen. Tippe bei Bedarf auf den Barcode, damit die Kamera fokussiert.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(height: 1.4),
+                    ),
+                    const SizedBox(height: 11),
+                    TextButton.icon(
+                      onPressed: _enterManually,
+                      icon: const Icon(Icons.keyboard_rounded),
+                      label: const Text('EAN stattdessen eingeben'),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -93,17 +154,26 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
 class _ScannerOverlayPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final frameWidth = size.width * 0.78;
-    final frameHeight = 150.0;
+    final frameWidth = size.width * 0.88;
+    final frameHeight = 180.0;
     final rect = Rect.fromCenter(
-      center: Offset(size.width / 2, size.height * 0.42),
+      center: Offset(size.width / 2, size.height * 0.40),
       width: frameWidth,
       height: frameHeight,
     );
-    final overlay = Paint()..color = Colors.black.withValues(alpha: 0.48);
+
+    final overlay = Paint()
+      ..color = Colors.black.withValues(alpha: 0.44);
+
     final full = Path()..addRect(Offset.zero & size);
     final cutout = Path()
-      ..addRRect(RRect.fromRectAndRadius(rect, const Radius.circular(22)));
+      ..addRRect(
+        RRect.fromRectAndRadius(
+          rect,
+          const Radius.circular(22),
+        ),
+      );
+
     canvas.drawPath(
       Path.combine(PathOperation.difference, full, cutout),
       overlay,
@@ -113,8 +183,12 @@ class _ScannerOverlayPainter extends CustomPainter {
       ..color = const Color(0xFFFF6B7A)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 3;
+
     canvas.drawRRect(
-      RRect.fromRectAndRadius(rect, const Radius.circular(22)),
+      RRect.fromRectAndRadius(
+        rect,
+        const Radius.circular(22),
+      ),
       border,
     );
   }
