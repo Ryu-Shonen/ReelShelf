@@ -45,6 +45,12 @@ class _ShellScreenState extends State<ShellScreen> {
         actions: [
           if (_index != 2)
             IconButton(
+              tooltip: _index == 0 ? 'Film hinzufügen' : 'Film zur Wunschliste',
+              onPressed: () => _openAdd(),
+              icon: const Icon(Icons.add_rounded),
+            ),
+          if (_index != 2)
+            IconButton(
               tooltip: 'Barcode scannen',
               onPressed: _scanBarcode,
               icon: const Icon(Icons.qr_code_scanner_rounded),
@@ -69,13 +75,6 @@ class _ShellScreenState extends State<ShellScreen> {
               ],
             )
           : const Center(child: CircularProgressIndicator()),
-      floatingActionButton: _index == 2
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: _openAdd,
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('Film'),
-            ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (value) => setState(() => _index = value),

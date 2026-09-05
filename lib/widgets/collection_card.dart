@@ -46,7 +46,7 @@ class CollectionCard extends StatelessWidget {
           const SizedBox(height: 9),
           Text(
             item.title,
-            maxLines: 2,
+            maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               fontWeight: FontWeight.w800,
