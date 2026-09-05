@@ -44,7 +44,9 @@ class _EditItemScreenState extends State<EditItemScreen> {
     _price = TextEditingController(
       text: item.purchasePrice == null
           ? ''
-          : item.purchasePrice!.toStringAsFixed(2).replaceAll('.', ','),
+          : item.purchasePrice!
+              .toStringAsFixed(2)
+              .replaceAll('.', ','),
     );
     _purchaseDate = TextEditingController(text: item.purchaseDate ?? '');
     _location = TextEditingController(text: item.location);
@@ -122,9 +124,8 @@ class _EditItemScreenState extends State<EditItemScreen> {
       edition: _edition.text.trim(),
       ean: _ean.text.trim(),
       purchasePrice: _parsePrice(),
-      purchaseDate: _purchaseDate.text.trim().isEmpty
-          ? null
-          : _purchaseDate.text.trim(),
+      purchaseDate:
+          _purchaseDate.text.trim().isEmpty ? null : _purchaseDate.text.trim(),
       condition: _condition,
       location: _location.text.trim(),
       notes: _notes.text.trim(),
@@ -151,12 +152,23 @@ class _EditItemScreenState extends State<EditItemScreen> {
     }
   }
 
+  String get _primaryActionLabel {
+    if (!widget.isNew) return 'Änderungen speichern';
+    return _wishlist
+        ? 'Zur Wunschliste hinzufügen'
+        : 'Zur Sammlung hinzufügen';
+  }
+
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.isNew ? 'Ausgabe hinzufügen' : 'Ausgabe bearbeiten'),
+        title: Text(
+          widget.isNew
+              ? (_wishlist ? 'Wunsch hinzufügen' : 'Ausgabe hinzufügen')
+              : 'Ausgabe bearbeiten',
+        ),
         actions: [
           TextButton(
             onPressed: _saving ? null : _save,
@@ -180,7 +192,10 @@ class _EditItemScreenState extends State<EditItemScreen> {
                       SizedBox(
                         width: 74,
                         height: 108,
-                        child: MoviePoster(url: item.posterUrl, borderRadius: 12),
+                        child: MoviePoster(
+                          url: item.posterUrl,
+                          borderRadius: 12,
+                        ),
                       ),
                       const SizedBox(width: 14),
                       Expanded(
@@ -190,7 +205,11 @@ class _EditItemScreenState extends State<EditItemScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                item.title.isEmpty ? 'Manueller Eintrag' : item.title,
+                                item.title.isEmpty
+                                    ? 'Manueller Eintrag'
+                                    : item.title,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.w800,
@@ -200,7 +219,8 @@ class _EditItemScreenState extends State<EditItemScreen> {
                               Text(
                                 [
                                   if (item.year != null) '${item.year}',
-                                  if (item.runtime != null) '${item.runtime} Min.',
+                                  if (item.runtime != null)
+                                    '${item.runtime} Min.',
                                 ].join(' · '),
                                 style: TextStyle(
                                   color: Colors.white.withValues(alpha: 0.55),
@@ -214,7 +234,8 @@ class _EditItemScreenState extends State<EditItemScreen> {
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                     fontSize: 12.5,
-                                    color: Colors.white.withValues(alpha: 0.5),
+                                    color:
+                                        Colors.white.withValues(alpha: 0.5),
                                   ),
                                 ),
                               ],
@@ -227,6 +248,27 @@ class _EditItemScreenState extends State<EditItemScreen> {
                 ),
               ),
             const SizedBox(height: 18),
+            _SectionTitle('Speicherort'),
+            const SizedBox(height: 10),
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment<bool>(
+                  value: false,
+                  icon: Icon(Icons.grid_view_rounded),
+                  label: Text('Sammlung'),
+                ),
+                ButtonSegment<bool>(
+                  value: true,
+                  icon: Icon(Icons.bookmark_rounded),
+                  label: Text('Wunschliste'),
+                ),
+              ],
+              selected: <bool>{_wishlist},
+              onSelectionChanged: (selection) {
+                setState(() => _wishlist = selection.first);
+              },
+            ),
+            const SizedBox(height: 22),
             _SectionTitle('Film'),
             const SizedBox(height: 10),
             TextFormField(
@@ -248,9 +290,13 @@ class _EditItemScreenState extends State<EditItemScreen> {
                 prefixIcon: Icon(Icons.album_outlined),
               ),
               items: CollectionItem.mediaFormats
-                  .map((value) => DropdownMenuItem(value: value, child: Text(value)))
+                  .map(
+                    (value) =>
+                        DropdownMenuItem(value: value, child: Text(value)),
+                  )
                   .toList(),
-              onChanged: (value) => setState(() => _format = value ?? _format),
+              onChanged: (value) =>
+                  setState(() => _format = value ?? _format),
             ),
             const SizedBox(height: 12),
             TextFormField(
@@ -276,60 +322,70 @@ class _EditItemScreenState extends State<EditItemScreen> {
               ),
             ),
             const SizedBox(height: 22),
-            _SectionTitle('Deine Ausgabe'),
+            _SectionTitle(_wishlist ? 'Wunschdetails' : 'Deine Ausgabe'),
             const SizedBox(height: 10),
             DropdownButtonFormField<String>(
               initialValue: _condition,
-              decoration: const InputDecoration(
-                labelText: 'Zustand',
-                prefixIcon: Icon(Icons.verified_outlined),
+              decoration: InputDecoration(
+                labelText: _wishlist ? 'Gewünschter Zustand' : 'Zustand',
+                prefixIcon: const Icon(Icons.verified_outlined),
               ),
               items: CollectionItem.conditions
-                  .map((value) => DropdownMenuItem(value: value, child: Text(value)))
+                  .map(
+                    (value) =>
+                        DropdownMenuItem(value: value, child: Text(value)),
+                  )
                   .toList(),
-              onChanged: (value) => setState(() => _condition = value ?? _condition),
+              onChanged: (value) =>
+                  setState(() => _condition = value ?? _condition),
             ),
             const SizedBox(height: 12),
             TextFormField(
               controller: _price,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                labelText: 'Kaufpreis',
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(
+                labelText: _wishlist ? 'Preisvorstellung' : 'Kaufpreis',
                 hintText: 'z. B. 19,99',
                 suffixText: '€',
-                prefixIcon: Icon(Icons.euro_rounded),
+                prefixIcon: const Icon(Icons.euro_rounded),
               ),
               validator: (value) {
                 if (value == null || value.trim().isEmpty) return null;
-                return _parsePrice() == null ? 'Bitte eine gültige Zahl eingeben.' : null;
+                return _parsePrice() == null
+                    ? 'Bitte eine gültige Zahl eingeben.'
+                    : null;
               },
             ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _purchaseDate,
-              readOnly: true,
-              onTap: _pickDate,
-              decoration: InputDecoration(
-                labelText: 'Kaufdatum',
-                hintText: 'Optional',
-                prefixIcon: const Icon(Icons.calendar_today_outlined),
-                suffixIcon: _purchaseDate.text.isEmpty
-                    ? null
-                    : IconButton(
-                        onPressed: () => setState(() => _purchaseDate.clear()),
-                        icon: const Icon(Icons.close_rounded),
-                      ),
+            if (!_wishlist) ...[
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _purchaseDate,
+                readOnly: true,
+                onTap: _pickDate,
+                decoration: InputDecoration(
+                  labelText: 'Kaufdatum',
+                  hintText: 'Optional',
+                  prefixIcon: const Icon(Icons.calendar_today_outlined),
+                  suffixIcon: _purchaseDate.text.isEmpty
+                      ? null
+                      : IconButton(
+                          onPressed: () =>
+                              setState(() => _purchaseDate.clear()),
+                          icon: const Icon(Icons.close_rounded),
+                        ),
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _location,
-              decoration: const InputDecoration(
-                labelText: 'Standort',
-                hintText: 'z. B. Wohnzimmer · Regal 2',
-                prefixIcon: Icon(Icons.inventory_2_outlined),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _location,
+                decoration: const InputDecoration(
+                  labelText: 'Standort',
+                  hintText: 'z. B. Wohnzimmer · Regal 2',
+                  prefixIcon: Icon(Icons.inventory_2_outlined),
+                ),
               ),
-            ),
+            ],
             const SizedBox(height: 12),
             TextFormField(
               controller: _notes,
@@ -343,28 +399,15 @@ class _EditItemScreenState extends State<EditItemScreen> {
             ),
             const SizedBox(height: 18),
             Card(
-              child: Column(
-                children: [
-                  SwitchListTile(
-                    value: _favorite,
-                    onChanged: (value) => setState(() => _favorite = value),
-                    secondary: const Icon(Icons.favorite_outline_rounded),
-                    title: const Text('Favorit', style: TextStyle(fontWeight: FontWeight.w700)),
-                    subtitle: const Text('In der Sammlung hervorheben'),
-                  ),
-                  const Divider(height: 1),
-                  SwitchListTile(
-                    value: _wishlist,
-                    onChanged: (value) => setState(() => _wishlist = value),
-                    secondary: const Icon(Icons.bookmark_outline_rounded),
-                    title: const Text('Wunschliste', style: TextStyle(fontWeight: FontWeight.w700)),
-                    subtitle: Text(
-                      _wishlist
-                          ? 'Noch nicht in deinem Besitz'
-                          : 'Film zählt zu deiner Sammlung',
-                    ),
-                  ),
-                ],
+              child: SwitchListTile(
+                value: _favorite,
+                onChanged: (value) => setState(() => _favorite = value),
+                secondary: const Icon(Icons.favorite_outline_rounded),
+                title: const Text(
+                  'Favorit',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                subtitle: const Text('Eintrag hervorheben'),
               ),
             ),
             const SizedBox(height: 24),
@@ -376,7 +419,7 @@ class _EditItemScreenState extends State<EditItemScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.check_rounded),
-              label: Text(widget.isNew ? 'Zur Sammlung hinzufügen' : 'Änderungen speichern'),
+              label: Text(_primaryActionLabel),
             ),
           ],
         ),

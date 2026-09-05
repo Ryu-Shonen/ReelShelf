@@ -10,9 +10,14 @@ import 'edit_item_screen.dart';
 import 'settings_screen.dart';
 
 class AddMovieScreen extends StatefulWidget {
-  const AddMovieScreen({super.key, this.initialBarcode});
+  const AddMovieScreen({
+    super.key,
+    this.initialBarcode,
+    this.initialWishlist = false,
+  });
 
   final String? initialBarcode;
+  final bool initialWishlist;
 
   @override
   State<AddMovieScreen> createState() => _AddMovieScreenState();
@@ -24,11 +29,13 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
   bool _loading = false;
   String? _error;
   String? _barcode;
+  late bool _wishlist;
 
   @override
   void initState() {
     super.initState();
     _barcode = widget.initialBarcode;
+    _wishlist = widget.initialWishlist;
   }
 
   @override
@@ -72,7 +79,9 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
       await Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (_) => EditItemScreen(
-            item: details.toCollectionItem(ean: _barcode ?? ''),
+            item: details
+                .toCollectionItem(ean: _barcode ?? '')
+                .copyWith(wishlist: _wishlist),
             isNew: true,
           ),
         ),
@@ -93,6 +102,7 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
           item: CollectionItem(
             title: '',
             ean: _barcode ?? '',
+            wishlist: _wishlist,
             createdAt: now,
             updatedAt: now,
           ),
@@ -117,7 +127,7 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Film hinzufügen'),
+        title: Text(_wishlist ? 'Zur Wunschliste' : 'Film hinzufügen'),
         actions: [
           IconButton(
             tooltip: 'Barcode scannen',
@@ -133,10 +143,32 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                SegmentedButton<bool>(
+                  segments: const [
+                    ButtonSegment<bool>(
+                      value: false,
+                      icon: Icon(Icons.grid_view_rounded),
+                      label: Text('Sammlung'),
+                    ),
+                    ButtonSegment<bool>(
+                      value: true,
+                      icon: Icon(Icons.bookmark_rounded),
+                      label: Text('Wunschliste'),
+                    ),
+                  ],
+                  selected: <bool>{_wishlist},
+                  onSelectionChanged: (selection) {
+                    setState(() => _wishlist = selection.first);
+                  },
+                ),
+                const SizedBox(height: 12),
                 if (_barcode != null && _barcode!.isNotEmpty)
                   Container(
                     margin: const EdgeInsets.only(bottom: 10),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 11,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFFFF6B7A).withValues(alpha: 0.10),
                       borderRadius: BorderRadius.circular(16),
@@ -179,16 +211,14 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
                   ),
                 ),
                 const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _manual,
-                        icon: const Icon(Icons.edit_note_rounded),
-                        label: const Text('Manuell anlegen'),
-                      ),
-                    ),
-                  ],
+                OutlinedButton.icon(
+                  onPressed: _manual,
+                  icon: const Icon(Icons.edit_note_rounded),
+                  label: Text(
+                    _wishlist
+                        ? 'Wunsch manuell anlegen'
+                        : 'Film manuell anlegen',
+                  ),
                 ),
                 if (!configured) ...[
                   const SizedBox(height: 12),
@@ -200,17 +230,24 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
                         children: [
                           const Text(
                             'Automatische Filmdaten aktivieren',
-                            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 16,
+                            ),
                           ),
                           const SizedBox(height: 7),
                           Text(
                             'Für Cover, Laufzeit und Beschreibung benötigt ReelShelf einen kostenlosen TMDB Read Access Token.',
-                            style: TextStyle(color: Colors.white.withValues(alpha: 0.62)),
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.62),
+                            ),
                           ),
                           const SizedBox(height: 12),
                           FilledButton.tonalIcon(
                             onPressed: () => Navigator.of(context).push(
-                              MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                              MaterialPageRoute(
+                                builder: (_) => const SettingsScreen(),
+                              ),
                             ),
                             icon: const Icon(Icons.key_rounded),
                             label: const Text('Token einrichten'),
@@ -238,7 +275,9 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
                       padding: const EdgeInsets.all(28),
                       child: Text(
                         configured
-                            ? 'Suche einen Film bei TMDB oder lege deine Ausgabe manuell an.'
+                            ? _wishlist
+                                ? 'Suche einen Film bei TMDB und füge ihn deiner Wunschliste hinzu.'
+                                : 'Suche einen Film bei TMDB oder lege deine Ausgabe manuell an.'
                             : 'Du kannst bereits manuell Filme erfassen. Für die automatische Suche richtest du einmalig TMDB ein.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
@@ -273,9 +312,12 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
                                 const SizedBox(width: 14),
                                 Expanded(
                                   child: Padding(
-                                    padding: const EdgeInsets.symmetric(vertical: 13),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 13,
+                                    ),
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           movie.title,
@@ -288,15 +330,19 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
                                         ),
                                         const SizedBox(height: 4),
                                         Text(
-                                          movie.year?.toString() ?? 'Jahr unbekannt',
+                                          movie.year?.toString() ??
+                                              'Jahr unbekannt',
                                           style: TextStyle(
-                                            color: Colors.white.withValues(alpha: 0.5),
+                                            color: Colors.white.withValues(
+                                              alpha: 0.5,
+                                            ),
                                           ),
                                         ),
                                         const SizedBox(height: 8),
                                         Expanded(
                                           child: Text(
-                                            movie.overview?.trim().isNotEmpty == true
+                                            movie.overview?.trim().isNotEmpty ==
+                                                    true
                                                 ? movie.overview!
                                                 : 'Keine Beschreibung verfügbar.',
                                             maxLines: 3,
@@ -304,7 +350,9 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
                                             style: TextStyle(
                                               fontSize: 12.5,
                                               height: 1.3,
-                                              color: Colors.white.withValues(alpha: 0.62),
+                                              color: Colors.white.withValues(
+                                                alpha: 0.62,
+                                              ),
                                             ),
                                           ),
                                         ),

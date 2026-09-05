@@ -18,12 +18,26 @@ class ShellScreen extends StatefulWidget {
 class _ShellScreenState extends State<ShellScreen> {
   int _index = 0;
 
-  Future<void> _openAdd({String? barcode}) async {
+  Future<void> _openAdd({
+    String? barcode,
+    bool wishlist = false,
+  }) async {
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => AddMovieScreen(initialBarcode: barcode),
+        builder: (_) => AddMovieScreen(
+          initialBarcode: barcode,
+          initialWishlist: wishlist,
+        ),
       ),
     );
+  }
+
+  Future<void> _openCollectionAdd({String? barcode}) {
+    return _openAdd(barcode: barcode, wishlist: false);
+  }
+
+  Future<void> _openWishlistAdd({String? barcode}) {
+    return _openAdd(barcode: barcode, wishlist: true);
   }
 
   Future<void> _scanBarcode() async {
@@ -31,7 +45,10 @@ class _ShellScreenState extends State<ShellScreen> {
       MaterialPageRoute(builder: (_) => const BarcodeScannerScreen()),
     );
     if (!mounted || code == null || code.isEmpty) return;
-    await _openAdd(barcode: code);
+    await _openAdd(
+      barcode: code,
+      wishlist: _index == 1,
+    );
   }
 
   @override
@@ -46,7 +63,7 @@ class _ShellScreenState extends State<ShellScreen> {
           if (_index != 2)
             IconButton(
               tooltip: _index == 0 ? 'Film hinzufügen' : 'Film zur Wunschliste',
-              onPressed: () => _openAdd(),
+              onPressed: () => _openAdd(wishlist: _index == 1),
               icon: const Icon(Icons.add_rounded),
             ),
           if (_index != 2)
@@ -69,8 +86,8 @@ class _ShellScreenState extends State<ShellScreen> {
           ? IndexedStack(
               index: _index,
               children: [
-                LibraryView(onAdd: _openAdd),
-                WishlistView(onAdd: _openAdd),
+                LibraryView(onAdd: _openCollectionAdd),
+                WishlistView(onAdd: _openWishlistAdd),
                 const StatsView(),
               ],
             )

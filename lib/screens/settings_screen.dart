@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../services/tmdb_service.dart';
 import '../state/app_state.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -16,7 +17,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late final TextEditingController _region;
   bool _obscureToken = true;
   bool _saving = false;
+  bool _testing = false;
   bool _loadedInitialValues = false;
+  bool? _testSuccess;
+  String? _testMessage;
 
   @override
   void initState() {
@@ -45,6 +49,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.dispose();
   }
 
+  String get _normalizedLanguage =>
+      _language.text.trim().isEmpty ? 'de-DE' : _language.text.trim();
+
+  String get _normalizedRegion => _region.text.trim().isEmpty
+      ? 'DE'
+      : _region.text.trim().toUpperCase();
+
   Future<void> _saveTmdb() async {
     setState(() => _saving = true);
     try {
@@ -62,12 +73,53 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _testTmdb() async {
+    final token = _token.text.trim();
+    if (token.isEmpty) {
+      setState(() {
+        _testSuccess = false;
+        _testMessage = 'Bitte zuerst einen TMDB Read Access Token eingeben.';
+      });
+      return;
+    }
+
+    setState(() {
+      _testing = true;
+      _testSuccess = null;
+      _testMessage = null;
+    });
+
+    try {
+      final service = TmdbService(
+        token: token,
+        language: _normalizedLanguage,
+        region: _normalizedRegion,
+      );
+      await service.searchMovies('Avatar');
+      if (!mounted) return;
+      setState(() {
+        _testSuccess = true;
+        _testMessage = 'Verbindung zu TMDB erfolgreich.';
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _testSuccess = false;
+        _testMessage = 'Verbindung fehlgeschlagen: $error';
+      });
+    } finally {
+      if (mounted) setState(() => _testing = false);
+    }
+  }
+
   Future<void> _copyBackup() async {
     final json = AppStateScope.of(context).createBackupJson();
     await Clipboard.setData(ClipboardData(text: json));
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Backup wurde in die Zwischenablage kopiert.')),
+      const SnackBar(
+        content: Text('Backup wurde in die Zwischenablage kopiert.'),
+      ),
     );
   }
 
@@ -77,7 +129,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (text.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('In der Zwischenablage wurde kein Backup gefunden.')),
+        const SnackBar(
+          content: Text(
+            'In der Zwischenablage wurde kein Backup gefunden.',
+          ),
+        ),
       );
       return;
     }
@@ -91,15 +147,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'Die aktuelle Sammlung wird ersetzt. Stelle sicher, dass du vorher ein Backup erstellt hast.',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Abbrechen')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Wiederherstellen')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Wiederherstellen'),
+          ),
         ],
       ),
     );
     if (confirmed != true || !mounted) return;
 
     try {
-      final count = await AppStateScope.of(context).restoreBackupJson(text);
+      final count =
+          await AppStateScope.of(context).restoreBackupJson(text);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('$count Filme wurden wiederhergestellt.')),
@@ -107,7 +170,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Backup konnte nicht gelesen werden: $error')),
+        SnackBar(
+          content: Text('Backup konnte nicht gelesen werden: $error'),
+        ),
       );
     }
   }
@@ -122,8 +187,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'Alle ${state.items.length} Einträge werden dauerhaft von diesem Gerät entfernt.',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Abbrechen')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Alles löschen')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Alles löschen'),
+          ),
         ],
       ),
     );
@@ -143,7 +214,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
         children: [
-          Text('Filmdaten', style: Theme.of(context).textTheme.titleLarge),
+          Text(
+            'Filmdaten',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
           const SizedBox(height: 10),
           Card(
             child: Padding(
@@ -153,12 +227,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: [
                   const Text(
                     'TMDB',
-                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 18,
+                    ),
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'ReelShelf nutzt TMDB für Cover, Beschreibungen, Laufzeiten und weitere Filmdaten. Der Token ist kostenlos und wird nur lokal auf deinem Gerät gespeichert.',
-                    style: TextStyle(color: Colors.white.withValues(alpha: 0.62)),
+                    'ReelShelf nutzt TMDB für Cover, Beschreibungen, Laufzeiten und weitere Filmdaten. Der Token wird nur lokal auf deinem Gerät gespeichert.',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.62),
+                    ),
                   ),
                   const SizedBox(height: 14),
                   TextField(
@@ -166,13 +245,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     obscureText: _obscureToken,
                     autocorrect: false,
                     enableSuggestions: false,
+                    onChanged: (_) {
+                      if (_testMessage != null) {
+                        setState(() {
+                          _testSuccess = null;
+                          _testMessage = null;
+                        });
+                      }
+                    },
                     decoration: InputDecoration(
                       labelText: 'TMDB Read Access Token',
                       prefixIcon: const Icon(Icons.key_rounded),
                       suffixIcon: IconButton(
-                        onPressed: () => setState(() => _obscureToken = !_obscureToken),
+                        onPressed: () => setState(
+                          () => _obscureToken = !_obscureToken,
+                        ),
                         icon: Icon(
-                          _obscureToken ? Icons.visibility_rounded : Icons.visibility_off_rounded,
+                          _obscureToken
+                              ? Icons.visibility_rounded
+                              : Icons.visibility_off_rounded,
                         ),
                       ),
                     ),
@@ -193,7 +284,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       Expanded(
                         child: TextField(
                           controller: _region,
-                          textCapitalization: TextCapitalization.characters,
+                          textCapitalization:
+                              TextCapitalization.characters,
                           decoration: const InputDecoration(
                             labelText: 'Region',
                             hintText: 'DE',
@@ -203,11 +295,78 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ],
                   ),
                   const SizedBox(height: 14),
-                  FilledButton.icon(
-                    onPressed: _saving ? null : _saveTmdb,
-                    icon: const Icon(Icons.save_rounded),
-                    label: const Text('TMDB speichern'),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed:
+                              _testing || _saving ? null : _testTmdb,
+                          icon: _testing
+                              ? const SizedBox.square(
+                                  dimension: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.wifi_tethering_rounded),
+                          label: const Text('Testen'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed:
+                              _saving || _testing ? null : _saveTmdb,
+                          icon: _saving
+                              ? const SizedBox.square(
+                                  dimension: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.save_rounded),
+                          label: const Text('Speichern'),
+                        ),
+                      ),
+                    ],
                   ),
+                  if (_testMessage != null) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: (_testSuccess == true
+                                ? Colors.green
+                                : Colors.redAccent)
+                            .withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: (_testSuccess == true
+                                  ? Colors.green
+                                  : Colors.redAccent)
+                              .withValues(alpha: 0.24),
+                        ),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            _testSuccess == true
+                                ? Icons.check_circle_outline_rounded
+                                : Icons.error_outline_rounded,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 9),
+                          Expanded(
+                            child: Text(
+                              _testMessage!,
+                              style: const TextStyle(height: 1.35),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   Text(
                     'Token erstellen: Auf themoviedb.org ein Konto anlegen und unter Einstellungen → API den „API Read Access Token“ kopieren.',
@@ -222,31 +381,50 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 24),
-          Text('Backup & Daten', style: Theme.of(context).textTheme.titleLarge),
+          Text(
+            'Backup & Daten',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
           const SizedBox(height: 10),
           Card(
             child: Column(
               children: [
                 ListTile(
                   leading: const Icon(Icons.content_copy_rounded),
-                  title: const Text('Backup kopieren', style: TextStyle(fontWeight: FontWeight.w700)),
-                  subtitle: Text('${state.items.length} Einträge als JSON in die Zwischenablage'),
+                  title: const Text(
+                    'Backup kopieren',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  subtitle: Text(
+                    '${state.items.length} Einträge als JSON in die Zwischenablage',
+                  ),
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: _copyBackup,
                 ),
                 const Divider(height: 1),
                 ListTile(
-                  leading: const Icon(Icons.settings_backup_restore_rounded),
-                  title: const Text('Backup einfügen', style: TextStyle(fontWeight: FontWeight.w700)),
-                  subtitle: const Text('JSON-Backup aus der Zwischenablage wiederherstellen'),
+                  leading:
+                      const Icon(Icons.settings_backup_restore_rounded),
+                  title: const Text(
+                    'Backup einfügen',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  subtitle: const Text(
+                    'JSON-Backup aus der Zwischenablage wiederherstellen',
+                  ),
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: _restoreBackup,
                 ),
                 const Divider(height: 1),
                 ListTile(
                   leading: const Icon(Icons.science_outlined),
-                  title: const Text('Demo-Sammlung laden', style: TextStyle(fontWeight: FontWeight.w700)),
-                  subtitle: const Text('Nur verfügbar, wenn die Sammlung leer ist'),
+                  title: const Text(
+                    'Demo-Sammlung laden',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  subtitle: const Text(
+                    'Nur verfügbar, wenn die Sammlung leer ist',
+                  ),
                   trailing: const Icon(Icons.chevron_right_rounded),
                   enabled: state.items.isEmpty,
                   onTap: state.items.isEmpty
@@ -254,7 +432,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           await state.seedDemoData();
                           if (!mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Demo-Sammlung wurde angelegt.')),
+                            const SnackBar(
+                              content:
+                                  Text('Demo-Sammlung wurde angelegt.'),
+                            ),
                           );
                         }
                       : null,
@@ -269,15 +450,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
             label: const Text('Gesamte Sammlung löschen'),
           ),
           const SizedBox(height: 26),
-          Text('Über ReelShelf', style: Theme.of(context).textTheme.titleLarge),
+          Text(
+            'Über ReelShelf',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
           const SizedBox(height: 10),
           Card(
             child: Column(
               children: [
                 const ListTile(
                   leading: Icon(Icons.movie_filter_rounded),
-                  title: Text('ReelShelf 0.1.0', style: TextStyle(fontWeight: FontWeight.w800)),
-                  subtitle: Text('Moderne Sammlung für physische Filme'),
+                  title: Text(
+                    'ReelShelf 0.2.0',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  subtitle:
+                      Text('Moderne Sammlung für physische Filme'),
+                ),
+                const Divider(height: 1),
+                const ListTile(
+                  leading: Icon(Icons.data_object_rounded),
+                  title: Text(
+                    'Filmdaten von TMDB',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  subtitle: Text(
+                    'This product uses the TMDB API but is not endorsed or certified by TMDB.',
+                  ),
                 ),
                 const Divider(height: 1),
                 ListTile(
@@ -287,19 +486,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onTap: () => showLicensePage(
                     context: context,
                     applicationName: 'ReelShelf',
-                    applicationVersion: '0.1.0',
+                    applicationVersion: '0.2.0',
                   ),
                 ),
               ],
-            ),
-          ),
-          const SizedBox(height: 14),
-          Text(
-            'This product uses the TMDB API but is not endorsed or certified by TMDB.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.42),
-              fontSize: 12,
             ),
           ),
         ],
