@@ -73,39 +73,3 @@ Der Scanner liest EAN-13, EAN-8, UPC-A, UPC-E und Code 128. Die EAN wird der eig
 
 TMDB ist eine **Filmdatenbank**, keine vollständige EAN-Datenbank für deutsche Disc-Releases. Deshalb kann ReelShelf nach einem Scan nicht zuverlässig aus jeder EAN automatisch die exakte deutsche 4K-/Blu-ray-Ausgabe bestimmen. Aktuell wird die EAN übernommen und der Film anschließend per TMDB gesucht. Eine spätere Version kann dafür eine eigene Community-/Release-Datenbank ergänzen.
 
-## Projektstruktur
-
-```text
-lib/
-  core/        Theme
-  models/      Film- und Sammlungsmodelle
-  screens/     Sammlung, Wunschliste, Scanner, Details, Einstellungen
-  services/    SQLite, TMDB, Einstellungen
-  state/       zentraler App-State
-  widgets/     Poster, Karten, Empty States
-android/       Android-Projekt
-.github/       automatischer APK-Build
-```
-
-## Nächste sinnvolle Ausbaustufe
-
-Für eine Version 0.2 bieten sich an:
-
-- Eigene Release-Datenbank für EAN → exakte deutsche Disc-Ausgabe
-- Boxsets mit einzelnen enthaltenen Filmen
-- Audio-/Untertitelspuren und Disc-Anzahl
-- Ausgeliehen an / Verleihhistorie
-- Eigene Listen und Tags
-- CSV-Import/Export
-- Cloud-Sync zwischen mehreren Geräten
-- Preis-/Wertverlauf für Sammlerstücke
-- Cover-Scan bzw. Suche nach Editionen
-- Play-Store-taugliches Signing, Datenschutzseite und App-Icon-Set
-
-## Daten & Attribution
-
-Filmdaten und Bilder können optional von TMDB geladen werden.
-
-> This product uses the TMDB API but is not endorsed or certified by TMDB.
-
-Vor einer öffentlichen Veröffentlichung bitte die dann aktuellen TMDB-Nutzungs- und Attributionsbedingungen prüfen und die geforderte TMDB-Attribution/Logodarstellung vollständig umsetzen.
