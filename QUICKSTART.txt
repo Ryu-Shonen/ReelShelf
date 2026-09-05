@@ -1,0 +1,28 @@
+REELSHELF 0.1 — QUICKSTART
+
+1) Installiere Flutter (Stable) und Android Studio / Android SDK.
+2) Entpacke dieses Projekt.
+3) Im Projektordner:
+
+   flutter pub get
+   flutter run
+
+APK bauen:
+
+   flutter build apk --release
+
+APK danach:
+   build/app/outputs/flutter-apk/app-release.apk
+
+TMDB:
+In der App unter Einstellungen einen kostenlosen „API Read Access Token“ von TMDB eintragen.
+Ohne TMDB funktioniert die manuelle Erfassung trotzdem.
+
+Kein Flutter lokal?
+Projekt auf GitHub hochladen und unter Actions den Workflow „Build Android APK“ starten.
+Das APK erscheint anschließend als GitHub-Artefakt.
+
+Wichtig:
+Der Barcode-Scanner liest die EAN der physischen Ausgabe. Eine verlässliche automatische
+EAN→deutsche Disc-Edition-Zuordnung ist in v0.1 noch nicht enthalten, weil TMDB keine
+vollständige Release-/EAN-Datenbank ist.
