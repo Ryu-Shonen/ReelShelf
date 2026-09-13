@@ -284,7 +284,7 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
 
       if (release == null) {
         _releaseMessage =
-            'EAN erkannt. Diese Ausgabe kennt ReelShelf noch nicht. Ordne unten den Film zu; beim Speichern merkt sich ReelShelf diese EAN dauerhaft lokal.';
+            'EAN erkannt. Diese Ausgabe kennt Unstreamed noch nicht. Ordne unten den Film zu; beim Speichern merkt sich Unstreamed diese EAN dauerhaft lokal.';
       } else {
         _releaseMessage =
             'Lokaler Treffer – dafür wurde keine externe Produktdatenbank abgefragt.';
@@ -468,7 +468,7 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
                           ),
                           const SizedBox(height: 7),
                           Text(
-                            'Für Cover, Laufzeit und Beschreibung benötigt ReelShelf einen kostenlosen TMDB Read Access Token.',
+                            'Für Cover, Laufzeit und Beschreibung benötigt Unstreamed einen kostenlosen TMDB Read Access Token.',
                             style: TextStyle(
                               color: Colors.white.withValues(
                                 alpha: 0.62,

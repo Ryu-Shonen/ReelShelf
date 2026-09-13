@@ -4,10 +4,10 @@
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <application
-        android:label="ReelShelf"
+        android:label="Unstreamed"
         android:name="${applicationName}"
-        android:icon="@drawable/ic_launcher"
-        android:roundIcon="@drawable/ic_launcher"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
         android:allowBackup="true"
         android:supportsRtl="true">
         <activity

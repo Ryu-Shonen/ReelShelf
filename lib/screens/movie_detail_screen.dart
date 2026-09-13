@@ -89,7 +89,7 @@ class MovieDetailScreen extends StatelessWidget {
               : 'Film entfernen?',
         ),
         content: Text(
-          '„${item.title}“ wird aus ReelShelf gelöscht.',
+          '„${item.title}“ wird aus Unstreamed gelöscht.',
         ),
         actions: [
           TextButton(

@@ -126,15 +126,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     final date =
         '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-    final fileName = 'ReelShelf_Backup_$date.reelshelf';
+    final fileName = 'Unstreamed_Backup_$date.unstreamed';
 
     try {
       final saved = await FilePicker.saveFile(
-        dialogTitle: 'ReelShelf-Backup speichern',
+        dialogTitle: 'Unstreamed-Backup speichern',
         fileName: fileName,
         bytes: bytes,
         type: FileType.custom,
-        allowedExtensions: const ['reelshelf'],
+        allowedExtensions: const ['unstreamed'],
       );
 
       if (!mounted || saved == null) return;
@@ -163,9 +163,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     try {
       file = await FilePicker.pickFile(
-        dialogTitle: 'ReelShelf-Backup auswählen',
+        dialogTitle: 'Unstreamed-Backup auswählen',
         type: FileType.custom,
-        allowedExtensions: const ['reelshelf', 'json'],
+        allowedExtensions: const ['unstreamed', 'reelshelf', 'json'],
       );
     } catch (error) {
       if (!mounted) return;
@@ -365,7 +365,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'ReelShelf nutzt TMDB für Cover, Beschreibungen, Laufzeiten und weitere Filmdaten. Der Token wird nur lokal auf deinem Gerät gespeichert.',
+                    'Unstreamed nutzt TMDB für Cover, Beschreibungen, Laufzeiten und weitere Filmdaten. Der Token wird nur lokal auf deinem Gerät gespeichert.',
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.62),
                     ),
@@ -544,7 +544,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   const SizedBox(height: 9),
                   Text(
-                    'ReelShelf lädt den offiziellen IMDb-Ratings-Datensatz direkt auf dein Gerät und speichert nur die Bewertungen deiner Filme lokal. Die Daten werden höchstens einmal pro 7 Tage automatisch erneuert.',
+                    'Unstreamed lädt den offiziellen IMDb-Ratings-Datensatz direkt auf dein Gerät und speichert nur die Bewertungen deiner Filme lokal. Die Daten werden höchstens einmal pro 7 Tage automatisch erneuert.',
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.62),
                       height: 1.45,
@@ -620,7 +620,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     style: TextStyle(fontWeight: FontWeight.w700),
                   ),
                   subtitle: const Text(
-                    'Unbekannte EAN einmal einem Film zuordnen. Danach erkennt ReelShelf diese Ausgabe lokal, ohne externe Produktdatenbank.',
+                    'Unbekannte EAN einmal einem Film zuordnen. Danach erkennt Unstreamed diese Ausgabe lokal, ohne externe Produktdatenbank.',
                   ),
                 ),
                 if (state.physicalReleaseCount > 0) ...[
@@ -720,7 +720,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 26),
           Text(
-            'Über ReelShelf',
+            'Über Unstreamed',
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 10),
@@ -730,7 +730,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const ListTile(
                   leading: Icon(Icons.movie_filter_rounded),
                   title: Text(
-                    'ReelShelf 0.4.6',
+                    'Unstreamed 0.4.7',
                     style: TextStyle(fontWeight: FontWeight.w800),
                   ),
                   subtitle: Text(
@@ -756,7 +756,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     style: TextStyle(fontWeight: FontWeight.w700),
                   ),
                   subtitle: Text(
-                    'EAN-Zuordnungen und Boxset-Inhalte werden von ReelShelf auf deinem Gerät gespeichert. UPCitemdb wird nicht mehr abgefragt.',
+                    'EAN-Zuordnungen und Boxset-Inhalte werden von Unstreamed auf deinem Gerät gespeichert. UPCitemdb wird nicht mehr abgefragt.',
                   ),
                 ),
                 const Divider(height: 1),
@@ -769,7 +769,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       const Icon(Icons.chevron_right_rounded),
                   onTap: () => showLicensePage(
                     context: context,
-                    applicationName: 'ReelShelf',
+                    applicationName: 'Unstreamed',
                     applicationVersion: '0.4.6',
                   ),
                 ),

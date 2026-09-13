@@ -4,15 +4,15 @@
         <item name="android:forceDarkAllowed">false</item>
         <item name="android:windowFullscreen">false</item>
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>
-        <item name="android:navigationBarColor">#0B0C10</item>
-        <item name="android:statusBarColor">#0B0C10</item>
+        <item name="android:navigationBarColor">#070707</item>
+        <item name="android:statusBarColor">#070707</item>
         <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowBackground">#0B0C10</item>
+        <item name="android:windowBackground">#070707</item>
     </style>
     <style name="NormalTheme" parent="@android:style/Theme.Material.NoActionBar">
         <item name="android:windowLightStatusBar">false</item>
-        <item name="android:navigationBarColor">#0B0C10</item>
-        <item name="android:statusBarColor">#0B0C10</item>
+        <item name="android:navigationBarColor">#070707</item>
+        <item name="android:statusBarColor">#070707</item>
         <item name="android:windowBackground">?android:colorBackground</item>
     </style>
 </resources>

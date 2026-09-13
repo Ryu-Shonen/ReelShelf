@@ -337,7 +337,7 @@ class AppState extends ChangeNotifier {
         .toList();
 
     return const JsonEncoder.withIndent('  ').convert({
-      'app': 'ReelShelf',
+      'app': 'Unstreamed',
       'version': 3,
       'exportedAt': DateTime.now().toIso8601String(),
       'items': _items.map((item) => item.toJson()).toList(),

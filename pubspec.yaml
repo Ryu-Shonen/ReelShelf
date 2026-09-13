@@ -1,7 +1,7 @@
 name: reelshelf
-description: A modern physical movie collection tracker for Android.
+description: Unstreamed - a modern physical movie collection tracker for Android.
 publish_to: "none"
-version: 0.4.6+11
+version: 0.4.7+12
 
 environment:
   sdk: ">=3.7.0 <4.0.0"
@@ -23,3 +23,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/branding/unstreamed_splash.png
+    - assets/branding/unstreamed_icon.png

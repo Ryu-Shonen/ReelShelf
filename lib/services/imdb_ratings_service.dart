@@ -189,7 +189,7 @@ class ImdbRatingsService {
 
       final request =
           http.Request('GET', Uri.parse(datasetUrl));
-      request.headers['User-Agent'] = 'ReelShelf/0.4.3';
+      request.headers['User-Agent'] = 'Unstreamed/0.4.7';
 
       final response = await client.send(request);
       if (response.statusCode != 200) {
