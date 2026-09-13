@@ -118,7 +118,7 @@ class _BoxsetMoviePickerScreenState
                 hintText: configured
                     ? 'Film suchen'
                     : 'TMDB-Token zuerst einrichten',
-                prefixIcon: const Icon(Icons.movie_search_rounded),
+                prefixIcon: const Icon(Icons.manage_search_rounded),
                 suffixIcon: IconButton(
                   onPressed:
                       configured && !_loading ? _search : null,
