@@ -21,7 +21,7 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
       BarcodeFormat.upcA,
       BarcodeFormat.upcE,
       BarcodeFormat.code128,
-      BarcodeFormat.itf,
+      BarcodeFormat.itf14,
     ],
   );
 
@@ -121,7 +121,7 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
       BarcodeFormat.upcA => 'UPC-A',
       BarcodeFormat.upcE => 'UPC-E',
       BarcodeFormat.code128 => 'Code 128',
-      BarcodeFormat.itf => 'ITF',
+      BarcodeFormat.itf14 => 'ITF',
       _ => 'Barcode',
     };
   }

@@ -730,7 +730,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const ListTile(
                   leading: Icon(Icons.movie_filter_rounded),
                   title: Text(
-                    'Unstreamed 0.4.7',
+                    'Unstreamed 0.4.7.1',
                     style: TextStyle(fontWeight: FontWeight.w800),
                   ),
                   subtitle: Text(
