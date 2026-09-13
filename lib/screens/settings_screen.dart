@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
 
 import '../services/tmdb_service.dart';
 import '../state/app_state.dart';
@@ -116,29 +119,89 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _copyBackup() async {
-    final json = AppStateScope.of(context).createBackupJson();
-    await Clipboard.setData(ClipboardData(text: json));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Backup inklusive lokaler EAN-Zuordnungen kopiert.',
+    final state = AppStateScope.of(context);
+    final json = state.createBackupJson();
+    final bytes = Uint8List.fromList(utf8.encode(json));
+    final now = DateTime.now();
+
+    final date =
+        '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    final fileName = 'ReelShelf_Backup_$date.reelshelf';
+
+    try {
+      final saved = await FilePicker.saveFile(
+        dialogTitle: 'ReelShelf-Backup speichern',
+        fileName: fileName,
+        bytes: bytes,
+        type: FileType.custom,
+        allowedExtensions: const ['reelshelf'],
+      );
+
+      if (!mounted || saved == null) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Backup gespeichert: $fileName',
+          ),
         ),
-      ),
-    );
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Backup konnte nicht gespeichert werden: $error',
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _restoreBackup() async {
-    final data = await Clipboard.getData('text/plain');
-    final text = data?.text?.trim() ?? '';
+    PlatformFile? file;
+
+    try {
+      file = await FilePicker.pickFile(
+        dialogTitle: 'ReelShelf-Backup auswählen',
+        type: FileType.custom,
+        allowedExtensions: const ['reelshelf', 'json'],
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Dateiauswahl fehlgeschlagen: $error',
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (!mounted || file == null) return;
+
+    String text;
+    try {
+      final bytes = await file.readAsBytes();
+      text = utf8.decode(bytes).trim();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Backup-Datei konnte nicht gelesen werden: $error',
+          ),
+        ),
+      );
+      return;
+    }
 
     if (text.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'In der Zwischenablage wurde kein Backup gefunden.',
-          ),
+          content: Text('Die gewählte Backup-Datei ist leer.'),
         ),
       );
       return;
@@ -149,8 +212,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Backup wiederherstellen?'),
-        content: const Text(
-          'Die aktuelle Sammlung und die lokalen EAN-Zuordnungen werden ersetzt. Stelle sicher, dass du vorher ein Backup erstellt hast.',
+        content: Text(
+          '„${file!.name}“ wird geladen. Die aktuelle Sammlung und die lokalen EAN-Zuordnungen werden ersetzt.',
         ),
         actions: [
           TextButton(
@@ -171,9 +234,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final count =
           await AppStateScope.of(context).restoreBackupJson(text);
       if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('$count Filme wurden wiederhergestellt.'),
+          content: Text(
+            '$count Filme aus „${file.name}“ wiederhergestellt.',
+          ),
         ),
       );
     } catch (error) {
@@ -181,7 +247,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Backup konnte nicht gelesen werden: $error',
+            'Backup konnte nicht wiederhergestellt werden: $error',
           ),
         ),
       );
@@ -485,11 +551,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ListTile(
                   leading: const Icon(Icons.content_copy_rounded),
                   title: const Text(
-                    'Backup kopieren',
+                    'Backup-Datei erstellen',
                     style: TextStyle(fontWeight: FontWeight.w700),
                   ),
                   subtitle: Text(
-                    '${state.items.length} Einträge + ${state.physicalReleaseCount} EAN-Zuordnungen als JSON',
+                    '${state.items.length} Einträge + ${state.physicalReleaseCount} EAN-Zuordnungen als .reelshelf-Datei speichern',
                   ),
                   trailing:
                       const Icon(Icons.chevron_right_rounded),
@@ -501,11 +567,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Icons.settings_backup_restore_rounded,
                   ),
                   title: const Text(
-                    'Backup einfügen',
+                    'Backup-Datei laden',
                     style: TextStyle(fontWeight: FontWeight.w700),
                   ),
                   subtitle: const Text(
-                    'JSON-Backup aus der Zwischenablage wiederherstellen',
+                    'Gespeicherte .reelshelf- oder .json-Datei auswählen und wiederherstellen',
                   ),
                   trailing:
                       const Icon(Icons.chevron_right_rounded),
@@ -560,7 +626,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const ListTile(
                   leading: Icon(Icons.movie_filter_rounded),
                   title: Text(
-                    'ReelShelf 0.4.0',
+                    'ReelShelf 0.4.1',
                     style: TextStyle(fontWeight: FontWeight.w800),
                   ),
                   subtitle: Text(
@@ -600,7 +666,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onTap: () => showLicensePage(
                     context: context,
                     applicationName: 'ReelShelf',
-                    applicationVersion: '0.4.0',
+                    applicationVersion: '0.4.1',
                   ),
                 ),
               ],
