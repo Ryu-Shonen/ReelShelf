@@ -13,6 +13,7 @@ class CollectionItem {
     this.runtime,
     this.genres = '',
     this.voteAverage,
+    this.userRating,
     this.originalLanguage,
     this.mediaFormat = 'Blu-ray',
     this.edition = '',
@@ -41,6 +42,7 @@ class CollectionItem {
   final int? runtime;
   final String genres;
   final double? voteAverage;
+  final double? userRating;
   final String? originalLanguage;
   final String mediaFormat;
   final String edition;
@@ -95,6 +97,7 @@ class CollectionItem {
     int? runtime,
     String? genres,
     double? voteAverage,
+    double? userRating,
     String? originalLanguage,
     String? mediaFormat,
     String? edition,
@@ -123,6 +126,7 @@ class CollectionItem {
       runtime: runtime ?? this.runtime,
       genres: genres ?? this.genres,
       voteAverage: voteAverage ?? this.voteAverage,
+      userRating: userRating ?? this.userRating,
       originalLanguage: originalLanguage ?? this.originalLanguage,
       mediaFormat: mediaFormat ?? this.mediaFormat,
       edition: edition ?? this.edition,
@@ -154,6 +158,7 @@ class CollectionItem {
       runtime: runtime,
       genres: genres,
       voteAverage: voteAverage,
+      userRating: userRating,
       originalLanguage: originalLanguage,
       mediaFormat: mediaFormat,
       edition: edition,
@@ -184,6 +189,7 @@ class CollectionItem {
       runtime: runtime,
       genres: genres,
       voteAverage: voteAverage,
+      userRating: userRating,
       originalLanguage: originalLanguage,
       mediaFormat: mediaFormat,
       edition: edition,
@@ -215,6 +221,7 @@ class CollectionItem {
       'runtime': runtime,
       'genres': genres,
       'vote_average': voteAverage,
+      'user_rating': userRating,
       'original_language': originalLanguage,
       'media_format': mediaFormat,
       'edition': edition,
@@ -246,6 +253,7 @@ class CollectionItem {
       runtime: map['runtime'] as int?,
       genres: (map['genres'] as String?) ?? '',
       voteAverage: (map['vote_average'] as num?)?.toDouble(),
+      userRating: (map['user_rating'] as num?)?.toDouble(),
       originalLanguage: map['original_language'] as String?,
       mediaFormat: (map['media_format'] as String?) ?? 'Blu-ray',
       edition: (map['edition'] as String?) ?? '',

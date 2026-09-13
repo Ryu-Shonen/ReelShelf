@@ -17,7 +17,7 @@ class DatabaseService {
 
     _database = await openDatabase(
       path,
-      version: 4,
+      version: 5,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -87,6 +87,11 @@ class DatabaseService {
         }
         if (oldVersion < 4) {
           await _createImdbRatingTable(db);
+        }
+        if (oldVersion < 5) {
+          await db.execute(
+            'ALTER TABLE collection_items ADD COLUMN user_rating REAL',
+          );
         }
       },
     );
@@ -172,6 +177,7 @@ class DatabaseService {
         runtime INTEGER,
         genres TEXT NOT NULL DEFAULT '',
         vote_average REAL,
+        user_rating REAL,
         original_language TEXT,
         media_format TEXT NOT NULL DEFAULT 'Blu-ray',
         edition TEXT NOT NULL DEFAULT '',

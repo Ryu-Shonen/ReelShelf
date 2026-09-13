@@ -730,7 +730,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const ListTile(
                   leading: Icon(Icons.movie_filter_rounded),
                   title: Text(
-                    'Unstreamed 0.4.9.1',
+                    'Unstreamed 0.5.0',
                     style: TextStyle(fontWeight: FontWeight.w800),
                   ),
                   subtitle: Text(
@@ -781,7 +781,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onTap: () => showLicensePage(
                     context: context,
                     applicationName: 'Unstreamed',
-                    applicationVersion: '0.4.9.1',
+                    applicationVersion: '0.5.0',
                   ),
                 ),
               ],

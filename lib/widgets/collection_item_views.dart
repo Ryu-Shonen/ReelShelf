@@ -109,6 +109,8 @@ class CompactSquareCollectionCard extends StatelessWidget {
                       if (item.year != null) '${item.year}',
                       if (imdb?.rating != null)
                         'IMDb ${imdb!.rating!.toStringAsFixed(1)}',
+                      if (item.userRating != null)
+                        'Meine ${item.userRating!.toStringAsFixed(1)}',
                     ].join(' · '),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -235,6 +237,11 @@ class CollectionListRow extends StatelessWidget {
                             _InfoChip(
                               'IMDb ${imdb!.rating!.toStringAsFixed(1)}',
                               highlighted: true,
+                            ),
+                          if (item.userRating != null)
+                            _InfoChip(
+                              'Meine ${item.userRating!.toStringAsFixed(1)}',
+                              personal: true,
                             ),
                         ],
                       ),
@@ -386,10 +393,12 @@ class _InfoChip extends StatelessWidget {
   const _InfoChip(
     this.text, {
     this.highlighted = false,
+    this.personal = false,
   });
 
   final String text;
   final bool highlighted;
+  final bool personal;
 
   @override
   Widget build(BuildContext context) {
@@ -403,9 +412,12 @@ class _InfoChip extends StatelessWidget {
       padding:
           const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(
-        color: highlighted
-            ? const Color(0xFFF5C518).withValues(alpha: 0.12)
-            : Colors.white.withValues(alpha: 0.06),
+        color: personal
+            ? const Color(0xFFE7B95E).withValues(alpha: 0.14)
+            : highlighted
+                ? const Color(0xFFF5C518)
+                    .withValues(alpha: 0.12)
+                : Colors.white.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(

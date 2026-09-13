@@ -50,13 +50,29 @@ class CollectionCard extends StatelessWidget {
                   left: 9,
                   child: _Badge(label: item.mediaFormat),
                 ),
-                if (imdb?.rating != null)
+                if (imdb?.rating != null ||
+                    item.userRating != null)
                   Positioned(
                     bottom: 9,
                     left: 9,
-                    child: _RatingBadge(
-                      label:
-                          'IMDb ${imdb!.rating!.toStringAsFixed(1)}',
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (item.userRating != null) ...[
+                          _RatingBadge(
+                            label:
+                                'Meine ${item.userRating!.toStringAsFixed(1)}',
+                            personal: true,
+                          ),
+                          if (imdb?.rating != null)
+                            const SizedBox(height: 5),
+                        ],
+                        if (imdb?.rating != null)
+                          _RatingBadge(
+                            label:
+                                'IMDb ${imdb!.rating!.toStringAsFixed(1)}',
+                          ),
+                      ],
                     ),
                   ),
                 if (onPurchased != null)
@@ -135,9 +151,13 @@ class _Badge extends StatelessWidget {
 }
 
 class _RatingBadge extends StatelessWidget {
-  const _RatingBadge({required this.label});
+  const _RatingBadge({
+    required this.label,
+    this.personal = false,
+  });
 
   final String label;
+  final bool personal;
 
   @override
   Widget build(BuildContext context) {
@@ -154,10 +174,14 @@ class _RatingBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
-            Icons.star_rounded,
+          Icon(
+            personal
+                ? Icons.person_rounded
+                : Icons.star_rounded,
             size: 13,
-            color: Color(0xFFF5C518),
+            color: personal
+                ? const Color(0xFFE7B95E)
+                : const Color(0xFFF5C518),
           ),
           const SizedBox(width: 4),
           Text(

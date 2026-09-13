@@ -34,6 +34,7 @@ class _EditItemScreenState extends State<EditItemScreen> {
   late String _condition;
   late bool _favorite;
   late bool _wishlist;
+  double? _userRating;
   bool _saving = false;
   bool _loadedComponents = false;
   List<ReleaseComponent> _components = const [];
@@ -66,6 +67,7 @@ class _EditItemScreenState extends State<EditItemScreen> {
             : 'Sehr gut';
     _favorite = item.favorite;
     _wishlist = item.wishlist;
+    _userRating = item.userRating;
   }
 
   @override
@@ -180,6 +182,13 @@ class _EditItemScreenState extends State<EditItemScreen> {
     return double.tryParse(value);
   }
 
+  String _formatUserRating(double rating) {
+    final fixed = rating % 1 == 0
+        ? rating.toStringAsFixed(0)
+        : rating.toStringAsFixed(1);
+    return fixed.replaceAll('.', ',');
+  }
+
   Future<void> _save() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
@@ -210,6 +219,7 @@ class _EditItemScreenState extends State<EditItemScreen> {
       genres: _format == 'Boxset' ? '' : base.genres,
       voteAverage:
           _format == 'Boxset' ? null : base.voteAverage,
+      userRating: _format == 'Boxset' ? null : _userRating,
       originalLanguage:
           _format == 'Boxset' ? null : base.originalLanguage,
       mediaFormat: _format,
@@ -657,6 +667,115 @@ class _EditItemScreenState extends State<EditItemScreen> {
                       'z. B. Wohnzimmer · Regal 2',
                   prefixIcon:
                       Icon(Icons.inventory_2_outlined),
+                ),
+              ),
+            ],
+            if (!isBoxSet) ...[
+              const SizedBox(height: 18),
+              _SectionTitle('Meine Bewertung'),
+              const SizedBox(height: 10),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    16,
+                    14,
+                    16,
+                    12,
+                  ),
+                  child: _userRating == null
+                      ? Row(
+                          children: [
+                            const Icon(
+                              Icons.star_border_rounded,
+                              size: 28,
+                            ),
+                            const SizedBox(width: 12),
+                            const Expanded(
+                              child: Column(
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Noch nicht bewertet',
+                                    style: TextStyle(
+                                      fontWeight:
+                                          FontWeight.w800,
+                                    ),
+                                  ),
+                                  SizedBox(height: 3),
+                                  Text(
+                                    'Deine persönliche Wertung ist unabhängig von IMDb und TMDB.',
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      color: Colors.white54,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            FilledButton.tonal(
+                              onPressed: () => setState(
+                                () => _userRating = 7.0,
+                              ),
+                              child: const Text('Bewerten'),
+                            ),
+                          ],
+                        )
+                      : Column(
+                          crossAxisAlignment:
+                              CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.star_rounded,
+                                  color: Color(0xFFE7B95E),
+                                  size: 30,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    '${_formatUserRating(_userRating!)} / 10',
+                                    style: const TextStyle(
+                                      fontSize: 21,
+                                      fontWeight:
+                                          FontWeight.w900,
+                                    ),
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: () => setState(
+                                    () => _userRating = null,
+                                  ),
+                                  child:
+                                      const Text('Entfernen'),
+                                ),
+                              ],
+                            ),
+                            Slider(
+                              value: _userRating!,
+                              min: 0.5,
+                              max: 10,
+                              divisions: 19,
+                              label:
+                                  _formatUserRating(_userRating!),
+                              onChanged: (value) => setState(
+                                () => _userRating = value,
+                              ),
+                            ),
+                            Text(
+                              '0,5 bis 10 Punkte · Schritte von 0,5',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                color: Colors.white.withValues(
+                                  alpha: 0.42,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                 ),
               ),
             ],

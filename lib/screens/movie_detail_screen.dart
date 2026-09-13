@@ -267,6 +267,12 @@ class MovieDetailScreen extends StatelessWidget {
                               'IMDb ${imdb!.rating!.toStringAsFixed(1)}',
                           icon: Icons.star_rounded,
                         ),
+                      if (item.userRating != null)
+                        _Pill(
+                          text:
+                              'Meine ${item.userRating!.toStringAsFixed(1)}',
+                          icon: Icons.person_rounded,
+                        ),
                     ],
                   ),
                   if (item.genres.isNotEmpty) ...[
@@ -452,6 +458,13 @@ class MovieDetailScreen extends StatelessWidget {
                           value: item.condition,
                           icon: Icons.verified_outlined,
                         ),
+                        if (item.userRating != null)
+                          _InfoRow(
+                            label: 'Meine Bewertung',
+                            value:
+                                '${item.userRating!.toStringAsFixed(1)} / 10',
+                            icon: Icons.star_rounded,
+                          ),
                         if (item.purchasePrice != null)
                           _InfoRow(
                             label: item.wishlist
