@@ -1,6 +1,7 @@
 class CollectionItem {
   const CollectionItem({
     this.id,
+    this.releaseId,
     this.tmdbId,
     required this.title,
     this.originalTitle,
@@ -28,6 +29,7 @@ class CollectionItem {
   });
 
   final int? id;
+  final int? releaseId;
   final int? tmdbId;
   final String title;
   final String? originalTitle;
@@ -81,6 +83,7 @@ class CollectionItem {
 
   CollectionItem copyWith({
     int? id,
+    int? releaseId,
     int? tmdbId,
     String? title,
     String? originalTitle,
@@ -108,6 +111,7 @@ class CollectionItem {
   }) {
     return CollectionItem(
       id: id ?? this.id,
+      releaseId: releaseId ?? this.releaseId,
       tmdbId: tmdbId ?? this.tmdbId,
       title: title ?? this.title,
       originalTitle: originalTitle ?? this.originalTitle,
@@ -137,6 +141,7 @@ class CollectionItem {
 
   CollectionItem withoutId() {
     return CollectionItem(
+      releaseId: releaseId,
       tmdbId: tmdbId,
       title: title,
       originalTitle: originalTitle,
@@ -167,6 +172,7 @@ class CollectionItem {
   Map<String, Object?> toDbMap() {
     return {
       if (id != null) 'id': id,
+      'release_id': releaseId,
       'tmdb_id': tmdbId,
       'title': title,
       'original_title': originalTitle,
@@ -197,6 +203,7 @@ class CollectionItem {
   factory CollectionItem.fromDbMap(Map<String, Object?> map) {
     return CollectionItem(
       id: map['id'] as int?,
+      releaseId: map['release_id'] as int?,
       tmdbId: map['tmdb_id'] as int?,
       title: map['title'] as String,
       originalTitle: map['original_title'] as String?,
@@ -219,8 +226,12 @@ class CollectionItem {
       notes: (map['notes'] as String?) ?? '',
       favorite: (map['favorite'] as int? ?? 0) == 1,
       wishlist: (map['wishlist'] as int? ?? 0) == 1,
-      createdAt: DateTime.tryParse(map['created_at'] as String? ?? '') ?? DateTime.now(),
-      updatedAt: DateTime.tryParse(map['updated_at'] as String? ?? '') ?? DateTime.now(),
+      createdAt:
+          DateTime.tryParse(map['created_at'] as String? ?? '') ??
+              DateTime.now(),
+      updatedAt:
+          DateTime.tryParse(map['updated_at'] as String? ?? '') ??
+              DateTime.now(),
     );
   }
 

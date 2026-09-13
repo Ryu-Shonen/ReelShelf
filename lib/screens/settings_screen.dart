@@ -66,7 +66,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('TMDB-Einstellungen gespeichert.')),
+        const SnackBar(
+          content: Text('TMDB-Einstellungen gespeichert.'),
+        ),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -78,7 +80,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (token.isEmpty) {
       setState(() {
         _testSuccess = false;
-        _testMessage = 'Bitte zuerst einen TMDB Read Access Token eingeben.';
+        _testMessage =
+            'Bitte zuerst einen TMDB Read Access Token eingeben.';
       });
       return;
     }
@@ -118,7 +121,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Backup wurde in die Zwischenablage kopiert.'),
+        content: Text(
+          'Backup inklusive lokaler EAN-Zuordnungen kopiert.',
+        ),
       ),
     );
   }
@@ -126,6 +131,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _restoreBackup() async {
     final data = await Clipboard.getData('text/plain');
     final text = data?.text?.trim() ?? '';
+
     if (text.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -144,7 +150,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Backup wiederherstellen?'),
         content: const Text(
-          'Die aktuelle Sammlung wird ersetzt. Stelle sicher, dass du vorher ein Backup erstellt hast.',
+          'Die aktuelle Sammlung und die lokalen EAN-Zuordnungen werden ersetzt. Stelle sicher, dass du vorher ein Backup erstellt hast.',
         ),
         actions: [
           TextButton(
@@ -158,6 +164,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
     );
+
     if (confirmed != true || !mounted) return;
 
     try {
@@ -165,13 +172,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
           await AppStateScope.of(context).restoreBackupJson(text);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$count Filme wurden wiederhergestellt.')),
+        SnackBar(
+          content: Text('$count Filme wurden wiederhergestellt.'),
+        ),
       );
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Backup konnte nicht gelesen werden: $error'),
+          content: Text(
+            'Backup konnte nicht gelesen werden: $error',
+          ),
         ),
       );
     }
@@ -184,7 +195,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Sammlung komplett löschen?'),
         content: Text(
-          'Alle ${state.items.length} Einträge werden dauerhaft von diesem Gerät entfernt.',
+          'Alle ${state.items.length} Einträge werden vom Gerät entfernt. Gelernte EAN-Zuordnungen bleiben erhalten.',
         ),
         actions: [
           TextButton(
@@ -198,17 +209,55 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
     );
+
     if (confirmed != true) return;
     await state.clearCollection();
+
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Sammlung wurde gelöscht.')),
+      const SnackBar(
+        content: Text('Sammlung wurde gelöscht.'),
+      ),
+    );
+  }
+
+  Future<void> _clearReleaseCache() async {
+    final state = AppStateScope.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('EAN-Zuordnungen löschen?'),
+        content: Text(
+          '${state.physicalReleaseCount} lokal gelernte physische Ausgaben werden entfernt. Deine Filme in Sammlung und Wunschliste bleiben erhalten.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Cache löschen'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+    await state.clearLocalReleaseCache();
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Lokale EAN-Zuordnungen wurden gelöscht.'),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final state = AppStateScope.of(context);
+
     return Scaffold(
       appBar: AppBar(title: const Text('Einstellungen')),
       body: ListView(
@@ -308,7 +357,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     strokeWidth: 2,
                                   ),
                                 )
-                              : const Icon(Icons.wifi_tethering_rounded),
+                              : const Icon(
+                                  Icons.wifi_tethering_rounded,
+                                ),
                           label: const Text('Testen'),
                         ),
                       ),
@@ -367,17 +418,59 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
                   ],
-                  const SizedBox(height: 12),
-                  Text(
-                    'Token erstellen: Auf themoviedb.org ein Konto anlegen und unter Einstellungen → API den „API Read Access Token“ kopieren.',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.48),
-                      fontSize: 12.5,
-                      height: 1.4,
-                    ),
-                  ),
                 ],
               ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'Lokale Ausgabendaten',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 10),
+          Card(
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.qr_code_2_rounded),
+                  title: const Text(
+                    'Gelernte EAN-Zuordnungen',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  subtitle: Text(
+                    '${state.physicalReleaseCount} physische Ausgaben lokal gespeichert',
+                  ),
+                  trailing: const Icon(Icons.offline_pin_rounded),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.info_outline_rounded),
+                  title: const Text(
+                    'So funktioniert es',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  subtitle: const Text(
+                    'Unbekannte EAN einmal einem Film zuordnen. Danach erkennt ReelShelf diese Ausgabe lokal, ohne externe Produktdatenbank.',
+                  ),
+                ),
+                if (state.physicalReleaseCount > 0) ...[
+                  const Divider(height: 1),
+                  ListTile(
+                    leading:
+                        const Icon(Icons.delete_sweep_outlined),
+                    title: const Text(
+                      'EAN-Cache leeren',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    subtitle: const Text(
+                      'Sammlung und Wunschliste bleiben erhalten',
+                    ),
+                    trailing:
+                        const Icon(Icons.chevron_right_rounded),
+                    onTap: _clearReleaseCache,
+                  ),
+                ],
+              ],
             ),
           ),
           const SizedBox(height: 24),
@@ -396,15 +489,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     style: TextStyle(fontWeight: FontWeight.w700),
                   ),
                   subtitle: Text(
-                    '${state.items.length} Einträge als JSON in die Zwischenablage',
+                    '${state.items.length} Einträge + ${state.physicalReleaseCount} EAN-Zuordnungen als JSON',
                   ),
-                  trailing: const Icon(Icons.chevron_right_rounded),
+                  trailing:
+                      const Icon(Icons.chevron_right_rounded),
                   onTap: _copyBackup,
                 ),
                 const Divider(height: 1),
                 ListTile(
-                  leading:
-                      const Icon(Icons.settings_backup_restore_rounded),
+                  leading: const Icon(
+                    Icons.settings_backup_restore_rounded,
+                  ),
                   title: const Text(
                     'Backup einfügen',
                     style: TextStyle(fontWeight: FontWeight.w700),
@@ -412,7 +507,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   subtitle: const Text(
                     'JSON-Backup aus der Zwischenablage wiederherstellen',
                   ),
-                  trailing: const Icon(Icons.chevron_right_rounded),
+                  trailing:
+                      const Icon(Icons.chevron_right_rounded),
                   onTap: _restoreBackup,
                 ),
                 const Divider(height: 1),
@@ -425,7 +521,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   subtitle: const Text(
                     'Nur verfügbar, wenn die Sammlung leer ist',
                   ),
-                  trailing: const Icon(Icons.chevron_right_rounded),
+                  trailing:
+                      const Icon(Icons.chevron_right_rounded),
                   enabled: state.items.isEmpty,
                   onTap: state.items.isEmpty
                       ? () async {
@@ -433,8 +530,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           if (!mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content:
-                                  Text('Demo-Sammlung wurde angelegt.'),
+                              content: Text(
+                                'Demo-Sammlung wurde angelegt.',
+                              ),
                             ),
                           );
                         }
@@ -445,7 +543,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 14),
           OutlinedButton.icon(
-            onPressed: state.items.isEmpty ? null : _clearCollection,
+            onPressed:
+                state.items.isEmpty ? null : _clearCollection,
             icon: const Icon(Icons.delete_outline_rounded),
             label: const Text('Gesamte Sammlung löschen'),
           ),
@@ -461,11 +560,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const ListTile(
                   leading: Icon(Icons.movie_filter_rounded),
                   title: Text(
-                    'ReelShelf 0.3.0',
+                    'ReelShelf 0.4.0',
                     style: TextStyle(fontWeight: FontWeight.w800),
                   ),
-                  subtitle:
-                      Text('Moderne Sammlung für physische Filme'),
+                  subtitle: Text(
+                    'Moderne Sammlung für physische Filme',
+                  ),
                 ),
                 const Divider(height: 1),
                 const ListTile(
@@ -480,24 +580,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const Divider(height: 1),
                 const ListTile(
-                  leading: Icon(Icons.qr_code_2_rounded),
+                  leading: Icon(Icons.offline_bolt_rounded),
                   title: Text(
-                    'Physische Ausgaben von UPCitemdb',
+                    'Physische Ausgaben lokal',
                     style: TextStyle(fontWeight: FontWeight.w700),
                   ),
                   subtitle: Text(
-                    'Barcode- und Produktsuche für Blu-rays, 4K UHDs, Sondereditionen und Boxsets.',
+                    'EAN-Zuordnungen werden von ReelShelf auf deinem Gerät gespeichert. UPCitemdb wird nicht mehr abgefragt.',
                   ),
                 ),
                 const Divider(height: 1),
                 ListTile(
-                  leading: const Icon(Icons.info_outline_rounded),
-                  title: const Text('Open-Source-Lizenzen'),
-                  trailing: const Icon(Icons.chevron_right_rounded),
+                  leading:
+                      const Icon(Icons.info_outline_rounded),
+                  title:
+                      const Text('Open-Source-Lizenzen'),
+                  trailing:
+                      const Icon(Icons.chevron_right_rounded),
                   onTap: () => showLicensePage(
                     context: context,
                     applicationName: 'ReelShelf',
-                    applicationVersion: '0.3.0',
+                    applicationVersion: '0.4.0',
                   ),
                 ),
               ],

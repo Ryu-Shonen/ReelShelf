@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/collection_item.dart';
+import '../models/physical_release.dart';
 import '../state/app_state.dart';
 import '../widgets/movie_poster.dart';
 import 'barcode_scanner_screen.dart';
@@ -38,6 +39,7 @@ class _EditItemScreenState extends State<EditItemScreen> {
   void initState() {
     super.initState();
     final item = widget.item;
+
     _title = TextEditingController(text: item.title);
     _edition = TextEditingController(text: item.edition);
     _ean = TextEditingController(text: item.ean);
@@ -48,15 +50,17 @@ class _EditItemScreenState extends State<EditItemScreen> {
               .toStringAsFixed(2)
               .replaceAll('.', ','),
     );
-    _purchaseDate = TextEditingController(text: item.purchaseDate ?? '');
+    _purchaseDate =
+        TextEditingController(text: item.purchaseDate ?? '');
     _location = TextEditingController(text: item.location);
     _notes = TextEditingController(text: item.notes);
     _format = CollectionItem.mediaFormats.contains(item.mediaFormat)
         ? item.mediaFormat
         : 'Sonstiges';
-    _condition = CollectionItem.conditions.contains(item.condition)
-        ? item.condition
-        : 'Sehr gut';
+    _condition =
+        CollectionItem.conditions.contains(item.condition)
+            ? item.condition
+            : 'Sehr gut';
     _favorite = item.favorite;
     _wishlist = item.wishlist;
   }
@@ -75,23 +79,56 @@ class _EditItemScreenState extends State<EditItemScreen> {
 
   Future<void> _scanBarcode() async {
     final result = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => const BarcodeScannerScreen()),
+      MaterialPageRoute(
+        builder: (_) => const BarcodeScannerScreen(),
+      ),
     );
     if (!mounted || result == null) return;
-    _ean.text = result;
+
+    final normalized = PhysicalRelease.normalizeBarcode(result);
+    _ean.text = normalized;
+
+    final cached =
+        AppStateScope.of(context).findReleaseByEan(normalized);
+    if (cached == null) return;
+
+    setState(() {
+      if (_title.text.trim().isEmpty) {
+        _title.text = cached.title;
+      }
+      if (_edition.text.trim().isEmpty) {
+        _edition.text = cached.edition;
+      }
+      _format = CollectionItem.mediaFormats
+              .contains(cached.mediaFormat)
+          ? cached.mediaFormat
+          : _format;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Lokale EAN-Zuordnung gefunden und übernommen.',
+        ),
+      ),
+    );
   }
 
   Future<void> _pickDate() async {
-    final initial = DateTime.tryParse(_purchaseDate.text) ?? DateTime.now();
+    final initial =
+        DateTime.tryParse(_purchaseDate.text) ?? DateTime.now();
     final selected = await showDatePicker(
       context: context,
       initialDate: initial,
       firstDate: DateTime(1950),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
+      lastDate:
+          DateTime.now().add(const Duration(days: 365)),
     );
     if (selected == null) return;
+
     _purchaseDate.text =
         '${selected.year.toString().padLeft(4, '0')}-${selected.month.toString().padLeft(2, '0')}-${selected.day.toString().padLeft(2, '0')}';
+    if (mounted) setState(() {});
   }
 
   double? _parsePrice() {
@@ -102,12 +139,17 @@ class _EditItemScreenState extends State<EditItemScreen> {
 
   Future<void> _save() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
+
     setState(() => _saving = true);
     final state = AppStateScope.of(context);
     final base = widget.item;
     final now = DateTime.now();
+    final normalizedEan =
+        PhysicalRelease.normalizeBarcode(_ean.text);
+
     final item = CollectionItem(
       id: base.id,
+      releaseId: base.releaseId,
       tmdbId: base.tmdbId,
       title: _title.text.trim(),
       originalTitle: base.originalTitle,
@@ -122,10 +164,11 @@ class _EditItemScreenState extends State<EditItemScreen> {
       originalLanguage: base.originalLanguage,
       mediaFormat: _format,
       edition: _edition.text.trim(),
-      ean: _ean.text.trim(),
+      ean: normalizedEan,
       purchasePrice: _parsePrice(),
-      purchaseDate:
-          _purchaseDate.text.trim().isEmpty ? null : _purchaseDate.text.trim(),
+      purchaseDate: _purchaseDate.text.trim().isEmpty
+          ? null
+          : _purchaseDate.text.trim(),
       condition: _condition,
       location: _location.text.trim(),
       notes: _notes.text.trim(),
@@ -141,12 +184,15 @@ class _EditItemScreenState extends State<EditItemScreen> {
       } else {
         await state.updateItem(item);
       }
+
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Speichern fehlgeschlagen: $error')),
+        SnackBar(
+          content: Text('Speichern fehlgeschlagen: $error'),
+        ),
       );
       setState(() => _saving = false);
     }
@@ -162,11 +208,14 @@ class _EditItemScreenState extends State<EditItemScreen> {
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(
           widget.isNew
-              ? (_wishlist ? 'Wunsch hinzufügen' : 'Ausgabe hinzufügen')
+              ? (_wishlist
+                  ? 'Wunsch hinzufügen'
+                  : 'Ausgabe hinzufügen')
               : 'Ausgabe bearbeiten',
         ),
         actions: [
@@ -187,7 +236,8 @@ class _EditItemScreenState extends State<EditItemScreen> {
                 child: Padding(
                   padding: const EdgeInsets.all(14),
                   child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment:
+                        CrossAxisAlignment.start,
                     children: [
                       SizedBox(
                         width: 74,
@@ -200,9 +250,11 @@ class _EditItemScreenState extends State<EditItemScreen> {
                       const SizedBox(width: 14),
                       Expanded(
                         child: Padding(
-                          padding: const EdgeInsets.only(top: 4),
+                          padding:
+                              const EdgeInsets.only(top: 4),
                           child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                            crossAxisAlignment:
+                                CrossAxisAlignment.start,
                             children: [
                               Text(
                                 item.title.isEmpty
@@ -218,12 +270,14 @@ class _EditItemScreenState extends State<EditItemScreen> {
                               const SizedBox(height: 6),
                               Text(
                                 [
-                                  if (item.year != null) '${item.year}',
+                                  if (item.year != null)
+                                    '${item.year}',
                                   if (item.runtime != null)
                                     '${item.runtime} Min.',
                                 ].join(' · '),
                                 style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.55),
+                                  color: Colors.white
+                                      .withValues(alpha: 0.55),
                                 ),
                               ),
                               if (item.genres.isNotEmpty) ...[
@@ -231,11 +285,12 @@ class _EditItemScreenState extends State<EditItemScreen> {
                                 Text(
                                   item.genres,
                                   maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
+                                  overflow:
+                                      TextOverflow.ellipsis,
                                   style: TextStyle(
                                     fontSize: 12.5,
-                                    color:
-                                        Colors.white.withValues(alpha: 0.5),
+                                    color: Colors.white
+                                        .withValues(alpha: 0.5),
                                   ),
                                 ),
                               ],
@@ -269,18 +324,20 @@ class _EditItemScreenState extends State<EditItemScreen> {
               },
             ),
             const SizedBox(height: 22),
-            _SectionTitle('Film'),
+            _SectionTitle('Film & physische Ausgabe'),
             const SizedBox(height: 10),
             TextFormField(
               controller: _title,
-              textCapitalization: TextCapitalization.sentences,
+              textCapitalization:
+                  TextCapitalization.sentences,
               decoration: const InputDecoration(
                 labelText: 'Titel',
                 prefixIcon: Icon(Icons.movie_outlined),
               ),
-              validator: (value) => value == null || value.trim().isEmpty
-                  ? 'Bitte einen Titel eingeben.'
-                  : null,
+              validator: (value) =>
+                  value == null || value.trim().isEmpty
+                      ? 'Bitte einen Titel eingeben.'
+                      : null,
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
@@ -291,8 +348,10 @@ class _EditItemScreenState extends State<EditItemScreen> {
               ),
               items: CollectionItem.mediaFormats
                   .map(
-                    (value) =>
-                        DropdownMenuItem(value: value, child: Text(value)),
+                    (value) => DropdownMenuItem(
+                      value: value,
+                      child: Text(value),
+                    ),
                   )
                   .toList(),
               onChanged: (value) =>
@@ -303,8 +362,10 @@ class _EditItemScreenState extends State<EditItemScreen> {
               controller: _edition,
               decoration: const InputDecoration(
                 labelText: 'Edition',
-                hintText: 'z. B. White Edition, Extended Edition',
-                prefixIcon: Icon(Icons.auto_awesome_outlined),
+                hintText:
+                    'z. B. White Edition, Extended Edition',
+                prefixIcon:
+                    Icon(Icons.auto_awesome_outlined),
               ),
             ),
             const SizedBox(height: 12),
@@ -313,45 +374,67 @@ class _EditItemScreenState extends State<EditItemScreen> {
               keyboardType: TextInputType.number,
               decoration: InputDecoration(
                 labelText: 'EAN / Barcode',
-                prefixIcon: const Icon(Icons.qr_code_2_rounded),
+                helperText:
+                    'Wird beim Speichern lokal mit dieser Ausgabe verknüpft.',
+                prefixIcon:
+                    const Icon(Icons.qr_code_2_rounded),
                 suffixIcon: IconButton(
                   tooltip: 'Scannen',
                   onPressed: _scanBarcode,
-                  icon: const Icon(Icons.qr_code_scanner_rounded),
+                  icon: const Icon(
+                    Icons.qr_code_scanner_rounded,
+                  ),
                 ),
               ),
             ),
             const SizedBox(height: 22),
-            _SectionTitle(_wishlist ? 'Wunschdetails' : 'Deine Ausgabe'),
+            _SectionTitle(
+              _wishlist
+                  ? 'Wunschdetails'
+                  : 'Deine Ausgabe',
+            ),
             const SizedBox(height: 10),
             DropdownButtonFormField<String>(
               initialValue: _condition,
               decoration: InputDecoration(
-                labelText: _wishlist ? 'Gewünschter Zustand' : 'Zustand',
-                prefixIcon: const Icon(Icons.verified_outlined),
+                labelText: _wishlist
+                    ? 'Gewünschter Zustand'
+                    : 'Zustand',
+                prefixIcon:
+                    const Icon(Icons.verified_outlined),
               ),
               items: CollectionItem.conditions
                   .map(
-                    (value) =>
-                        DropdownMenuItem(value: value, child: Text(value)),
+                    (value) => DropdownMenuItem(
+                      value: value,
+                      child: Text(value),
+                    ),
                   )
                   .toList(),
-              onChanged: (value) =>
-                  setState(() => _condition = value ?? _condition),
+              onChanged: (value) => setState(
+                () => _condition = value ?? _condition,
+              ),
             ),
             const SizedBox(height: 12),
             TextFormField(
               controller: _price,
               keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
+                  const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               decoration: InputDecoration(
-                labelText: _wishlist ? 'Preisvorstellung' : 'Kaufpreis',
+                labelText: _wishlist
+                    ? 'Preisvorstellung'
+                    : 'Kaufpreis',
                 hintText: 'z. B. 19,99',
                 suffixText: '€',
-                prefixIcon: const Icon(Icons.euro_rounded),
+                prefixIcon:
+                    const Icon(Icons.euro_rounded),
               ),
               validator: (value) {
-                if (value == null || value.trim().isEmpty) return null;
+                if (value == null || value.trim().isEmpty) {
+                  return null;
+                }
                 return _parsePrice() == null
                     ? 'Bitte eine gültige Zahl eingeben.'
                     : null;
@@ -366,13 +449,17 @@ class _EditItemScreenState extends State<EditItemScreen> {
                 decoration: InputDecoration(
                   labelText: 'Kaufdatum',
                   hintText: 'Optional',
-                  prefixIcon: const Icon(Icons.calendar_today_outlined),
+                  prefixIcon: const Icon(
+                    Icons.calendar_today_outlined,
+                  ),
                   suffixIcon: _purchaseDate.text.isEmpty
                       ? null
                       : IconButton(
-                          onPressed: () =>
-                              setState(() => _purchaseDate.clear()),
-                          icon: const Icon(Icons.close_rounded),
+                          onPressed: () => setState(
+                            () => _purchaseDate.clear(),
+                          ),
+                          icon:
+                              const Icon(Icons.close_rounded),
                         ),
                 ),
               ),
@@ -381,8 +468,10 @@ class _EditItemScreenState extends State<EditItemScreen> {
                 controller: _location,
                 decoration: const InputDecoration(
                   labelText: 'Standort',
-                  hintText: 'z. B. Wohnzimmer · Regal 2',
-                  prefixIcon: Icon(Icons.inventory_2_outlined),
+                  hintText:
+                      'z. B. Wohnzimmer · Regal 2',
+                  prefixIcon:
+                      Icon(Icons.inventory_2_outlined),
                 ),
               ),
             ],
@@ -401,13 +490,18 @@ class _EditItemScreenState extends State<EditItemScreen> {
             Card(
               child: SwitchListTile(
                 value: _favorite,
-                onChanged: (value) => setState(() => _favorite = value),
-                secondary: const Icon(Icons.favorite_outline_rounded),
+                onChanged: (value) =>
+                    setState(() => _favorite = value),
+                secondary: const Icon(
+                  Icons.favorite_outline_rounded,
+                ),
                 title: const Text(
                   'Favorit',
-                  style: TextStyle(fontWeight: FontWeight.w700),
+                  style:
+                      TextStyle(fontWeight: FontWeight.w700),
                 ),
-                subtitle: const Text('Eintrag hervorheben'),
+                subtitle:
+                    const Text('Eintrag hervorheben'),
               ),
             ),
             const SizedBox(height: 24),
@@ -416,7 +510,9 @@ class _EditItemScreenState extends State<EditItemScreen> {
               icon: _saving
                   ? const SizedBox.square(
                       dimension: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                      ),
                     )
                   : const Icon(Icons.check_rounded),
               label: Text(_primaryActionLabel),
@@ -430,13 +526,17 @@ class _EditItemScreenState extends State<EditItemScreen> {
 
 class _SectionTitle extends StatelessWidget {
   const _SectionTitle(this.text);
+
   final String text;
 
   @override
   Widget build(BuildContext context) {
     return Text(
       text,
-      style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 19),
+      style: Theme.of(context)
+          .textTheme
+          .titleLarge
+          ?.copyWith(fontSize: 19),
     );
   }
 }

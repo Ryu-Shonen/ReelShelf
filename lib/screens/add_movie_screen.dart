@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../models/collection_item.dart';
+import '../models/physical_release.dart';
 import '../models/tmdb_movie.dart';
 import '../services/tmdb_service.dart';
-import '../services/upc_itemdb_service.dart';
 import '../state/app_state.dart';
 import '../widgets/movie_poster.dart';
 import 'barcode_scanner_screen.dart';
 import 'edit_item_screen.dart';
-import 'physical_release_search_screen.dart';
 import 'settings_screen.dart';
 
 class AddMovieScreen extends StatefulWidget {
@@ -27,15 +26,14 @@ class AddMovieScreen extends StatefulWidget {
 
 class _AddMovieScreenState extends State<AddMovieScreen> {
   final _searchController = TextEditingController();
-  final _upcService = const UpcItemDbService();
 
   List<TmdbMovie> _results = const [];
   bool _loading = false;
-  bool _physicalLoading = false;
+  bool _releaseLoading = false;
   String? _error;
-  String? _physicalMessage;
+  String? _releaseMessage;
   String? _barcode;
-  UpcItem? _physicalItem;
+  PhysicalRelease? _cachedRelease;
   late bool _wishlist;
 
   @override
@@ -46,7 +44,7 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
 
     if (_barcode?.trim().isNotEmpty == true) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _lookupBarcode(_barcode!);
+        if (mounted) _lookupLocalRelease(_barcode!);
       });
     }
   }
@@ -87,24 +85,24 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
     }
   }
 
-  CollectionItem _applyPhysicalData(
-    CollectionItem item, {
-    required String movieTitle,
-  }) {
-    final physical = _physicalItem;
+  CollectionItem _applyReleaseData(CollectionItem item) {
+    final release = _cachedRelease;
+
+    if (release != null) {
+      return release.applyTo(
+        item.copyWith(ean: _barcode ?? release.ean),
+        wishlist: _wishlist,
+      );
+    }
 
     return item.copyWith(
       ean: _barcode ?? item.ean,
       wishlist: _wishlist,
-      mediaFormat: physical?.suggestedMediaFormat ?? item.mediaFormat,
-      edition:
-          physical?.editionForMovie(movieTitle) ?? item.edition,
     );
   }
 
   Future<void> _selectMovie(TmdbMovie movie) async {
     final state = AppStateScope.of(context);
-
     setState(() => _loading = true);
 
     try {
@@ -112,9 +110,49 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
       if (!mounted) return;
 
       final base = details.toCollectionItem(ean: _barcode ?? '');
-      final item = _applyPhysicalData(
-        base,
-        movieTitle: details.title,
+      final item = _applyReleaseData(base);
+
+      await Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => EditItemScreen(
+            item: item,
+            isNew: true,
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _error = error.toString());
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _useCachedRelease() async {
+    final release = _cachedRelease;
+    if (release == null) return;
+
+    final state = AppStateScope.of(context);
+    final configured = state.tmdbToken.trim().isNotEmpty;
+
+    if (release.tmdbId == null || !configured) {
+      await _manual();
+      return;
+    }
+
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final details =
+          await _service(state).getMovieDetails(release.tmdbId!);
+      if (!mounted) return;
+
+      final item = release.applyTo(
+        details.toCollectionItem(ean: release.ean),
+        wishlist: _wishlist,
       );
 
       await Navigator.of(context).pushReplacement(
@@ -133,31 +171,21 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
     }
   }
 
-  Future<void> _manual({bool preferPhysicalTitle = false}) async {
+  Future<void> _manual() async {
     final now = DateTime.now();
-    final physical = _physicalItem;
-
-    String title = '';
-    if (physical != null) {
-      title = preferPhysicalTitle || physical.isLikelyBoxSet
-          ? physical.title
-          : physical.suggestedMovieQuery;
-    }
+    final release = _cachedRelease;
 
     await Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (_) => EditItemScreen(
           item: CollectionItem(
-            title: title,
-            ean: _barcode ?? physical?.ean ?? '',
+            releaseId: release?.id,
+            tmdbId: release?.tmdbId,
+            title: release?.title ?? '',
+            ean: _barcode ?? release?.ean ?? '',
             wishlist: _wishlist,
-            mediaFormat:
-                physical?.suggestedMediaFormat ?? 'Blu-ray',
-            edition: physical != null &&
-                    !physical.isLikelyBoxSet &&
-                    title != physical.title
-                ? physical.title
-                : '',
+            mediaFormat: release?.mediaFormat ?? 'Blu-ray',
+            edition: release?.edition ?? '',
             createdAt: now,
             updatedAt: now,
           ),
@@ -176,82 +204,54 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
 
     if (!mounted || result == null || result.trim().isEmpty) return;
 
+    final normalized = PhysicalRelease.normalizeBarcode(result);
     setState(() {
-      _barcode = result.trim();
-      _physicalItem = null;
-      _physicalMessage = null;
+      _barcode = normalized;
+      _cachedRelease = null;
+      _releaseMessage = null;
+      _results = const [];
     });
 
-    await _lookupBarcode(result);
+    await _lookupLocalRelease(normalized);
   }
 
-  Future<void> _lookupBarcode(String barcode) async {
-    final value = barcode.trim();
+  Future<void> _lookupLocalRelease(String barcode) async {
+    final value = PhysicalRelease.normalizeBarcode(barcode);
     if (value.isEmpty) return;
 
     setState(() {
-      _physicalLoading = true;
-      _physicalMessage = null;
+      _releaseLoading = true;
+      _releaseMessage = null;
     });
 
-    try {
-      final product = await _upcService.lookup(value);
-      if (!mounted) return;
+    final state = AppStateScope.of(context);
+    final release = state.findReleaseByEan(value);
 
-      if (product == null) {
-        setState(() {
-          _physicalItem = null;
-          _physicalMessage =
-              'Barcode erkannt, aber diese Ausgabe wurde in UPCitemdb nicht gefunden. Die EAN bleibt trotzdem gespeichert.';
-        });
-        return;
-      }
+    if (!mounted) return;
 
-      setState(() {
-        _physicalItem = product;
-        _barcode =
-            product.ean.isNotEmpty ? product.ean : value;
-        _physicalMessage = null;
+    setState(() {
+      _barcode = value;
+      _cachedRelease = release;
 
+      if (release == null) {
+        _releaseMessage =
+            'EAN erkannt. Diese Ausgabe kennt ReelShelf noch nicht. Ordne unten den Film zu; beim Speichern merkt sich ReelShelf diese EAN dauerhaft lokal.';
+      } else {
+        _releaseMessage =
+            'Lokaler Treffer – dafür wurde keine externe Produktdatenbank abgefragt.';
         if (_searchController.text.trim().isEmpty) {
-          _searchController.text = product.suggestedMovieQuery;
+          _searchController.text = release.title;
         }
-      });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _physicalItem = null;
-        _physicalMessage = error.toString();
-      });
-    } finally {
-      if (mounted) setState(() => _physicalLoading = false);
-    }
-  }
-
-  Future<void> _searchPhysicalRelease() async {
-    final result = await Navigator.of(context).push<UpcItem>(
-      MaterialPageRoute(
-        builder: (_) => const PhysicalReleaseSearchScreen(),
-      ),
-    );
-
-    if (!mounted || result == null) return;
-
-    setState(() {
-      _physicalItem = result;
-      _barcode = result.ean.isNotEmpty ? result.ean : _barcode;
-      _physicalMessage = null;
-
-      if (_searchController.text.trim().isEmpty) {
-        _searchController.text = result.suggestedMovieQuery;
       }
+
+      _releaseLoading = false;
     });
   }
 
-  void _clearPhysicalRelease() {
+  void _clearBarcode() {
     setState(() {
-      _physicalItem = null;
-      _physicalMessage = null;
+      _cachedRelease = null;
+      _releaseMessage = null;
       _barcode = null;
     });
   }
@@ -301,51 +301,33 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
                       ?.copyWith(fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 9),
-                Row(
-                  children: [
-                    Expanded(
-                      child: FilledButton.tonalIcon(
-                        onPressed:
-                            _physicalLoading ? null : _scan,
-                        icon: const Icon(
-                          Icons.qr_code_scanner_rounded,
-                        ),
-                        label: const Text('Barcode scannen'),
-                      ),
-                    ),
-                    const SizedBox(width: 9),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _physicalLoading
-                            ? null
-                            : _searchPhysicalRelease,
-                        icon: const Icon(Icons.search_rounded),
-                        label: const Text('Ausgabe suchen'),
-                      ),
-                    ),
-                  ],
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.tonalIcon(
+                    onPressed: _releaseLoading ? null : _scan,
+                    icon: const Icon(Icons.qr_code_scanner_rounded),
+                    label: const Text('Barcode scannen'),
+                  ),
                 ),
-                if (_physicalLoading) ...[
+                if (_releaseLoading) ...[
                   const SizedBox(height: 10),
                   const LinearProgressIndicator(minHeight: 2),
                 ],
-                if (_physicalItem != null) ...[
+                if (_cachedRelease != null) ...[
                   const SizedBox(height: 10),
-                  _PhysicalReleaseCard(
-                    item: _physicalItem!,
-                    barcode: _barcode,
-                    onClear: _clearPhysicalRelease,
-                    onCreateBoxSet: _physicalItem!.isLikelyBoxSet
-                        ? () => _manual(preferPhysicalTitle: true)
-                        : null,
+                  _LocalReleaseCard(
+                    release: _cachedRelease!,
+                    message: _releaseMessage,
+                    onUse: _loading ? null : _useCachedRelease,
+                    onClear: _clearBarcode,
                   ),
                 ] else if (_barcode?.isNotEmpty == true ||
-                    _physicalMessage != null) ...[
+                    _releaseMessage != null) ...[
                   const SizedBox(height: 10),
                   _BarcodeStatusCard(
                     barcode: _barcode,
-                    message: _physicalMessage,
-                    onClear: _clearPhysicalRelease,
+                    message: _releaseMessage,
+                    onClear: _clearBarcode,
                   ),
                 ],
                 const SizedBox(height: 18),
@@ -370,24 +352,18 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
                     suffixIcon: IconButton(
                       onPressed:
                           configured && !_loading ? _search : null,
-                      icon:
-                          const Icon(Icons.arrow_forward_rounded),
+                      icon: const Icon(Icons.arrow_forward_rounded),
                     ),
                   ),
                 ),
                 const SizedBox(height: 10),
                 OutlinedButton.icon(
-                  onPressed: () => _manual(
-                    preferPhysicalTitle:
-                        _physicalItem?.isLikelyBoxSet == true,
-                  ),
+                  onPressed: _manual,
                   icon: const Icon(Icons.edit_note_rounded),
                   label: Text(
                     _wishlist
                         ? 'Wunsch manuell anlegen'
-                        : _physicalItem?.isLikelyBoxSet == true
-                            ? 'Boxset manuell anlegen'
-                            : 'Film manuell anlegen',
+                        : 'Ausgabe manuell anlegen',
                   ),
                 ),
                 if (!configured) ...[
@@ -453,13 +429,10 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
                       padding: const EdgeInsets.all(28),
                       child: Text(
                         configured
-                            ? _physicalItem?.isLikelyBoxSet ==
-                                    true
-                                ? 'Für Collections und Boxsets kannst du den physischen Eintrag direkt manuell anlegen. Für einzelne Filme kannst du zusätzlich TMDB zuordnen.'
-                                : _wishlist
-                                    ? 'Suche einen Film bei TMDB und füge ihn deiner Wunschliste hinzu.'
-                                    : 'Suche einen Film bei TMDB oder lege deine Ausgabe manuell an.'
-                            : 'Du kannst bereits manuell Filme und Boxsets erfassen. Für die automatische Filmsuche richtest du einmalig TMDB ein.',
+                            ? _barcode?.isNotEmpty == true
+                                ? 'Wähle den passenden Film. Beim Speichern wird die EAN mit dieser physischen Ausgabe lokal verknüpft.'
+                                : 'Scanne zuerst eine Ausgabe oder suche direkt einen Film bei TMDB.'
+                            : 'Du kannst Filme bereits manuell erfassen. Für automatische Filmdaten richtest du einmalig TMDB ein.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: Colors.white.withValues(
@@ -577,18 +550,18 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
   }
 }
 
-class _PhysicalReleaseCard extends StatelessWidget {
-  const _PhysicalReleaseCard({
-    required this.item,
-    required this.barcode,
+class _LocalReleaseCard extends StatelessWidget {
+  const _LocalReleaseCard({
+    required this.release,
+    required this.message,
+    required this.onUse,
     required this.onClear,
-    this.onCreateBoxSet,
   });
 
-  final UpcItem item;
-  final String? barcode;
+  final PhysicalRelease release;
+  final String? message;
+  final VoidCallback? onUse;
   final VoidCallback onClear;
-  final VoidCallback? onCreateBoxSet;
 
   @override
   Widget build(BuildContext context) {
@@ -601,30 +574,42 @@ class _PhysicalReleaseCard extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _PhysicalImage(url: item.primaryImage),
-                const SizedBox(width: 12),
+                const Icon(
+                  Icons.offline_pin_rounded,
+                  color: Color(0xFFFF6B7A),
+                ),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment:
                         CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        item.title,
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w800,
-                          height: 1.2,
+                      const Text(
+                        'Lokal gespeichert',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
                         ),
                       ),
-                      if (item.brand.isNotEmpty) ...[
-                        const SizedBox(height: 5),
+                      const SizedBox(height: 5),
+                      Text(
+                        release.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      if (release.edition.isNotEmpty) ...[
+                        const SizedBox(height: 3),
                         Text(
-                          item.brand,
+                          release.edition,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             color: Colors.white.withValues(
-                              alpha: 0.5,
+                              alpha: 0.55,
                             ),
+                            fontSize: 12.5,
                           ),
                         ),
                       ],
@@ -633,71 +618,40 @@ class _PhysicalReleaseCard extends StatelessWidget {
                         spacing: 7,
                         runSpacing: 7,
                         children: [
-                          _MiniChip(item.suggestedMediaFormat),
-                          if (barcode?.isNotEmpty == true)
-                            _MiniChip('EAN $barcode'),
+                          _MiniChip(release.mediaFormat),
+                          _MiniChip('EAN ${release.ean}'),
                         ],
                       ),
                     ],
                   ),
                 ),
                 IconButton(
-                  tooltip: 'Ausgabe entfernen',
+                  tooltip: 'Barcode entfernen',
                   onPressed: onClear,
                   icon: const Icon(Icons.close_rounded),
                 ),
               ],
             ),
-            if (onCreateBoxSet != null) ...[
-              const SizedBox(height: 10),
-              FilledButton.tonalIcon(
-                onPressed: onCreateBoxSet,
-                icon: const Icon(Icons.all_inbox_rounded),
-                label: const Text(
-                  'Diese Collection als Boxset anlegen',
-                ),
-              ),
-            ] else ...[
+            if (message != null) ...[
               const SizedBox(height: 10),
               Text(
-                'Diese Ausgabedaten werden übernommen, sobald du unten den passenden Film auswählst.',
+                message!,
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.5),
+                  color: Colors.white.withValues(alpha: 0.52),
                   fontSize: 12.5,
                   height: 1.35,
                 ),
               ),
             ],
+            const SizedBox(height: 11),
+            FilledButton.tonalIcon(
+              onPressed: onUse,
+              icon: const Icon(Icons.arrow_forward_rounded),
+              label: const Text('Lokalen Treffer verwenden'),
+            ),
           ],
         ),
       ),
-    );
-  }
-}
-
-class _PhysicalImage extends StatelessWidget {
-  const _PhysicalImage({required this.url});
-
-  final String? url;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 66,
-      height: 88,
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(11),
-      ),
-      child: url == null
-          ? const Icon(Icons.album_outlined)
-          : Image.network(
-              url!,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) =>
-                  const Icon(Icons.album_outlined),
-            ),
     );
   }
 }
