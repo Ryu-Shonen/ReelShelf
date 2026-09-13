@@ -171,7 +171,7 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
     }
   }
 
-  Future<void> _manual() async {
+  Future<void> _manual({bool boxSet = false}) async {
     final now = DateTime.now();
     final release = _cachedRelease;
 
@@ -184,7 +184,7 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
             title: release?.title ?? '',
             ean: _barcode ?? release?.ean ?? '',
             wishlist: _wishlist,
-            mediaFormat: release?.mediaFormat ?? 'Blu-ray',
+            mediaFormat: boxSet ? 'Boxset' : (release?.mediaFormat ?? 'Blu-ray'),
             edition: release?.edition ?? '',
             createdAt: now,
             updatedAt: now,
@@ -357,14 +357,28 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
                   ),
                 ),
                 const SizedBox(height: 10),
-                OutlinedButton.icon(
-                  onPressed: _manual,
-                  icon: const Icon(Icons.edit_note_rounded),
-                  label: Text(
-                    _wishlist
-                        ? 'Wunsch manuell anlegen'
-                        : 'Ausgabe manuell anlegen',
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _manual(),
+                        icon: const Icon(Icons.edit_note_rounded),
+                        label: Text(
+                          _wishlist
+                              ? 'Wunsch manuell'
+                              : 'Ausgabe manuell',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 9),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _manual(boxSet: true),
+                        icon: const Icon(Icons.all_inbox_rounded),
+                        label: const Text('Boxset anlegen'),
+                      ),
+                    ),
+                  ],
                 ),
                 if (!configured) ...[
                   const SizedBox(height: 12),

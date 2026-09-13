@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/collection_item.dart';
+import '../models/release_component.dart';
 import '../state/app_state.dart';
 import '../widgets/movie_poster.dart';
 import 'edit_item_screen.dart';
@@ -41,7 +42,11 @@ class MovieDetailScreen extends StatelessWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Film entfernen?'),
+        title: Text(
+          item.mediaFormat == 'Boxset'
+              ? 'Boxset entfernen?'
+              : 'Film entfernen?',
+        ),
         content: Text(
           '„${item.title}“ wird aus ReelShelf gelöscht.',
         ),
@@ -79,6 +84,15 @@ class MovieDetailScreen extends StatelessWidget {
         ),
       );
     }
+
+    final components = item.releaseId == null
+        ? const <ReleaseComponent>[]
+        : state.componentsForRelease(item.releaseId!);
+
+    final isBoxSet =
+        item.mediaFormat == 'Boxset' || components.isNotEmpty;
+    final fallbackPoster =
+        components.isEmpty ? null : components.first.posterUrl;
 
     return Scaffold(
       body: CustomScrollView(
@@ -136,7 +150,10 @@ class MovieDetailScreen extends StatelessWidget {
               ),
             ],
             flexibleSpace: FlexibleSpaceBar(
-              background: _DetailHero(item: item),
+              background: _DetailHero(
+                item: item,
+                fallbackPosterUrl: fallbackPoster,
+              ),
             ),
           ),
           SliverToBoxAdapter(
@@ -170,8 +187,15 @@ class MovieDetailScreen extends StatelessWidget {
                     children: [
                       _Pill(
                         text: item.mediaFormat,
-                        icon: Icons.album_rounded,
+                        icon: isBoxSet
+                            ? Icons.all_inbox_rounded
+                            : Icons.album_rounded,
                       ),
+                      if (isBoxSet && components.isNotEmpty)
+                        _Pill(
+                          text: '${components.length} Filme',
+                          icon: Icons.video_library_outlined,
+                        ),
                       if (item.year != null)
                         _Pill(
                           text: '${item.year}',
@@ -221,11 +245,88 @@ class MovieDetailScreen extends StatelessWidget {
                       ),
                     ),
                   ],
+                  if (isBoxSet) ...[
+                    const SizedBox(height: 28),
+                    Row(
+                      children: [
+                        Text(
+                          'Enthaltene Filme',
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleLarge,
+                        ),
+                        const Spacer(),
+                        Text(
+                          '${components.length}',
+                          style: TextStyle(
+                            color: Colors.white.withValues(
+                              alpha: 0.5,
+                            ),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    if (components.isEmpty)
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(18),
+                          child: SizedBox(
+                            width: double.infinity,
+                            child: Text(
+                              'Diesem Boxset sind noch keine Filme zugeordnet. Über „Collection bearbeiten“ kannst du die enthaltenen Filme hinzufügen.',
+                              style: TextStyle(
+                                color: Colors.white.withValues(
+                                  alpha: 0.58,
+                                ),
+                                height: 1.45,
+                              ),
+                            ),
+                          ),
+                        ),
+                      )
+                    else
+                      ...components.map(
+                        (component) => Padding(
+                          padding:
+                              const EdgeInsets.only(bottom: 9),
+                          child: Card(
+                            child: ListTile(
+                              leading: SizedBox(
+                                width: 44,
+                                height: 66,
+                                child: MoviePoster(
+                                  url: component.posterUrl,
+                                  borderRadius: 7,
+                                ),
+                              ),
+                              title: Text(
+                                component.title,
+                                maxLines: 2,
+                                overflow:
+                                    TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontWeight:
+                                      FontWeight.w700,
+                                ),
+                              ),
+                              subtitle: component.year == null
+                                  ? null
+                                  : Text('${component.year}'),
+                              trailing: const Icon(
+                                Icons.movie_outlined,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                   const SizedBox(height: 28),
                   Row(
                     children: [
                       Text(
-                        item.mediaFormat == 'Boxset'
+                        isBoxSet
                             ? 'Meine Collection'
                             : 'Meine Ausgabe',
                         style: Theme.of(context)
@@ -247,7 +348,9 @@ class MovieDetailScreen extends StatelessWidget {
                         _InfoRow(
                           label: 'Format',
                           value: item.mediaFormat,
-                          icon: Icons.album_outlined,
+                          icon: isBoxSet
+                              ? Icons.all_inbox_outlined
+                              : Icons.album_outlined,
                         ),
                         if (item.edition.isNotEmpty)
                           _InfoRow(
@@ -322,7 +425,7 @@ class MovieDetailScreen extends StatelessWidget {
                       icon:
                           const Icon(Icons.edit_rounded),
                       label: Text(
-                        item.mediaFormat == 'Boxset'
+                        isBoxSet
                             ? 'Collection bearbeiten'
                             : 'Ausgabe bearbeiten',
                       ),
@@ -339,12 +442,18 @@ class MovieDetailScreen extends StatelessWidget {
 }
 
 class _DetailHero extends StatelessWidget {
-  const _DetailHero({required this.item});
+  const _DetailHero({
+    required this.item,
+    this.fallbackPosterUrl,
+  });
 
   final CollectionItem item;
+  final String? fallbackPosterUrl;
 
   @override
   Widget build(BuildContext context) {
+    final posterUrl = item.posterUrl ?? fallbackPosterUrl;
+
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -384,7 +493,7 @@ class _DetailHero extends StatelessWidget {
               width: 130,
               height: 194,
               child: MoviePoster(
-                url: item.posterUrl,
+                url: posterUrl,
                 borderRadius: 18,
               ),
             ),

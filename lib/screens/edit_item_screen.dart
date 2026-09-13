@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../models/collection_item.dart';
 import '../models/physical_release.dart';
+import '../models/release_component.dart';
 import '../state/app_state.dart';
 import '../widgets/movie_poster.dart';
 import 'barcode_scanner_screen.dart';
+import 'boxset_movie_picker_screen.dart';
 
 class EditItemScreen extends StatefulWidget {
   const EditItemScreen({
@@ -34,6 +36,8 @@ class _EditItemScreenState extends State<EditItemScreen> {
   late bool _favorite;
   late bool _wishlist;
   bool _saving = false;
+  bool _loadedComponents = false;
+  List<ReleaseComponent> _components = const [];
 
   @override
   void initState() {
@@ -63,6 +67,21 @@ class _EditItemScreenState extends State<EditItemScreen> {
             : 'Sehr gut';
     _favorite = item.favorite;
     _wishlist = item.wishlist;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_loadedComponents) return;
+    _loadedComponents = true;
+
+    final releaseId = widget.item.releaseId;
+    if (releaseId == null) return;
+
+    _components = AppStateScope.of(context)
+        .componentsForRelease(releaseId)
+        .map((component) => component.copyWith())
+        .toList();
   }
 
   @override
@@ -103,6 +122,13 @@ class _EditItemScreenState extends State<EditItemScreen> {
               .contains(cached.mediaFormat)
           ? cached.mediaFormat
           : _format;
+
+      if (cached.id != null) {
+        _components = AppStateScope.of(context)
+            .componentsForRelease(cached.id!)
+            .map((component) => component.copyWith())
+            .toList();
+      }
     });
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -112,6 +138,68 @@ class _EditItemScreenState extends State<EditItemScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _addBoxsetMovie() async {
+    final component =
+        await Navigator.of(context).push<ReleaseComponent>(
+      MaterialPageRoute(
+        builder: (_) => const BoxsetMoviePickerScreen(),
+      ),
+    );
+
+    if (!mounted || component == null) return;
+
+    final duplicate = _components.any(
+      (entry) =>
+          entry.tmdbId != null &&
+          entry.tmdbId == component.tmdbId,
+    );
+
+    if (duplicate) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Dieser Film ist bereits im Boxset enthalten.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _components = [
+        ..._components,
+        component.copyWith(
+          sequenceNumber: _components.length,
+        ),
+      ];
+    });
+  }
+
+  void _removeBoxsetMovie(int index) {
+    setState(() {
+      final updated = [..._components]..removeAt(index);
+      _components = [
+        for (var i = 0; i < updated.length; i++)
+          updated[i].copyWith(sequenceNumber: i),
+      ];
+    });
+  }
+
+  void _moveBoxsetMovie(int index, int delta) {
+    final target = index + delta;
+    if (target < 0 || target >= _components.length) return;
+
+    setState(() {
+      final updated = [..._components];
+      final item = updated.removeAt(index);
+      updated.insert(target, item);
+      _components = [
+        for (var i = 0; i < updated.length; i++)
+          updated[i].copyWith(sequenceNumber: i),
+      ];
+    });
   }
 
   Future<void> _pickDate() async {
@@ -150,18 +238,25 @@ class _EditItemScreenState extends State<EditItemScreen> {
     final item = CollectionItem(
       id: base.id,
       releaseId: base.releaseId,
-      tmdbId: base.tmdbId,
+      tmdbId: _format == 'Boxset' ? null : base.tmdbId,
       title: _title.text.trim(),
-      originalTitle: base.originalTitle,
-      year: base.year,
-      releaseDate: base.releaseDate,
-      posterPath: base.posterPath,
-      backdropPath: base.backdropPath,
-      overview: base.overview,
-      runtime: base.runtime,
-      genres: base.genres,
-      voteAverage: base.voteAverage,
-      originalLanguage: base.originalLanguage,
+      originalTitle:
+          _format == 'Boxset' ? null : base.originalTitle,
+      year: _format == 'Boxset' ? null : base.year,
+      releaseDate:
+          _format == 'Boxset' ? null : base.releaseDate,
+      posterPath:
+          _format == 'Boxset' ? null : base.posterPath,
+      backdropPath:
+          _format == 'Boxset' ? null : base.backdropPath,
+      overview:
+          _format == 'Boxset' ? null : base.overview,
+      runtime: _format == 'Boxset' ? null : base.runtime,
+      genres: _format == 'Boxset' ? '' : base.genres,
+      voteAverage:
+          _format == 'Boxset' ? null : base.voteAverage,
+      originalLanguage:
+          _format == 'Boxset' ? null : base.originalLanguage,
       mediaFormat: _format,
       edition: _edition.text.trim(),
       ean: normalizedEan,
@@ -179,10 +274,15 @@ class _EditItemScreenState extends State<EditItemScreen> {
     );
 
     try {
-      if (widget.isNew) {
-        await state.addItem(item);
-      } else {
-        await state.updateItem(item);
+      final saved = widget.isNew
+          ? await state.addItem(item)
+          : await state.updateItem(item);
+
+      if (saved.releaseId != null) {
+        await state.replaceReleaseComponents(
+          saved.releaseId!,
+          _format == 'Boxset' ? _components : const [],
+        );
       }
 
       if (!mounted) return;
@@ -202,12 +302,15 @@ class _EditItemScreenState extends State<EditItemScreen> {
     if (!widget.isNew) return 'Änderungen speichern';
     return _wishlist
         ? 'Zur Wunschliste hinzufügen'
-        : 'Zur Sammlung hinzufügen';
+        : _format == 'Boxset'
+            ? 'Boxset zur Sammlung hinzufügen'
+            : 'Zur Sammlung hinzufügen';
   }
 
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
+    final isBoxSet = _format == 'Boxset';
 
     return Scaffold(
       appBar: AppBar(
@@ -215,8 +318,12 @@ class _EditItemScreenState extends State<EditItemScreen> {
           widget.isNew
               ? (_wishlist
                   ? 'Wunsch hinzufügen'
-                  : 'Ausgabe hinzufügen')
-              : 'Ausgabe bearbeiten',
+                  : isBoxSet
+                      ? 'Boxset hinzufügen'
+                      : 'Ausgabe hinzufügen')
+              : isBoxSet
+                  ? 'Boxset bearbeiten'
+                  : 'Ausgabe bearbeiten',
         ),
         actions: [
           TextButton(
@@ -231,7 +338,8 @@ class _EditItemScreenState extends State<EditItemScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
           children: [
-            if (item.posterUrl != null || item.title.isNotEmpty)
+            if (!isBoxSet &&
+                (item.posterUrl != null || item.title.isNotEmpty))
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(14),
@@ -280,20 +388,6 @@ class _EditItemScreenState extends State<EditItemScreen> {
                                       .withValues(alpha: 0.55),
                                 ),
                               ),
-                              if (item.genres.isNotEmpty) ...[
-                                const SizedBox(height: 7),
-                                Text(
-                                  item.genres,
-                                  maxLines: 2,
-                                  overflow:
-                                      TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 12.5,
-                                    color: Colors.white
-                                        .withValues(alpha: 0.5),
-                                  ),
-                                ),
-                              ],
                             ],
                           ),
                         ),
@@ -324,15 +418,22 @@ class _EditItemScreenState extends State<EditItemScreen> {
               },
             ),
             const SizedBox(height: 22),
-            _SectionTitle('Film & physische Ausgabe'),
+            _SectionTitle(
+              isBoxSet ? 'Boxset' : 'Film & physische Ausgabe',
+            ),
             const SizedBox(height: 10),
             TextFormField(
               controller: _title,
               textCapitalization:
                   TextCapitalization.sentences,
-              decoration: const InputDecoration(
-                labelText: 'Titel',
-                prefixIcon: Icon(Icons.movie_outlined),
+              decoration: InputDecoration(
+                labelText:
+                    isBoxSet ? 'Boxset-Titel' : 'Titel',
+                prefixIcon: Icon(
+                  isBoxSet
+                      ? Icons.all_inbox_rounded
+                      : Icons.movie_outlined,
+                ),
               ),
               validator: (value) =>
                   value == null || value.trim().isEmpty
@@ -354,18 +455,22 @@ class _EditItemScreenState extends State<EditItemScreen> {
                     ),
                   )
                   .toList(),
-              onChanged: (value) =>
-                  setState(() => _format = value ?? _format),
+              onChanged: (value) {
+                setState(() {
+                  _format = value ?? _format;
+                });
+              },
             ),
             const SizedBox(height: 12),
             TextFormField(
               controller: _edition,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Edition',
-                hintText:
-                    'z. B. White Edition, Extended Edition',
+                hintText: isBoxSet
+                    ? 'z. B. Limited Edition'
+                    : 'z. B. White Edition, Extended Edition',
                 prefixIcon:
-                    Icon(Icons.auto_awesome_outlined),
+                    const Icon(Icons.auto_awesome_outlined),
               ),
             ),
             const SizedBox(height: 12),
@@ -374,8 +479,9 @@ class _EditItemScreenState extends State<EditItemScreen> {
               keyboardType: TextInputType.number,
               decoration: InputDecoration(
                 labelText: 'EAN / Barcode',
-                helperText:
-                    'Wird beim Speichern lokal mit dieser Ausgabe verknüpft.',
+                helperText: isBoxSet
+                    ? 'Optional. Boxsets ohne EAN bleiben trotzdem lokal speicherbar.'
+                    : 'Wird beim Speichern lokal mit dieser Ausgabe verknüpft.',
                 prefixIcon:
                     const Icon(Icons.qr_code_2_rounded),
                 suffixIcon: IconButton(
@@ -387,11 +493,142 @@ class _EditItemScreenState extends State<EditItemScreen> {
                 ),
               ),
             ),
+            if (isBoxSet) ...[
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: _SectionTitle(
+                      'Enthaltene Filme (${_components.length})',
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Film hinzufügen',
+                    onPressed: _addBoxsetMovie,
+                    icon: const Icon(
+                      Icons.add_circle_outline_rounded,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              if (_components.isEmpty)
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(18),
+                    child: Column(
+                      children: [
+                        const Icon(
+                          Icons.video_library_outlined,
+                          size: 34,
+                        ),
+                        const SizedBox(height: 9),
+                        Text(
+                          'Noch keine Filme zugeordnet.',
+                          style: TextStyle(
+                            color: Colors.white
+                                .withValues(alpha: 0.6),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        FilledButton.tonalIcon(
+                          onPressed: _addBoxsetMovie,
+                          icon: const Icon(Icons.add_rounded),
+                          label: const Text('Film hinzufügen'),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                ...List.generate(
+                  _components.length,
+                  (index) {
+                    final component = _components[index];
+                    return Padding(
+                      padding:
+                          const EdgeInsets.only(bottom: 9),
+                      child: Card(
+                        child: ListTile(
+                          leading: SizedBox(
+                            width: 42,
+                            height: 62,
+                            child: MoviePoster(
+                              url: component.posterUrl,
+                              borderRadius: 7,
+                            ),
+                          ),
+                          title: Text(
+                            component.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          subtitle: component.year == null
+                              ? null
+                              : Text('${component.year}'),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                tooltip: 'Nach oben',
+                                onPressed: index == 0
+                                    ? null
+                                    : () => _moveBoxsetMovie(
+                                          index,
+                                          -1,
+                                        ),
+                                icon: const Icon(
+                                  Icons.arrow_upward_rounded,
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Nach unten',
+                                onPressed:
+                                    index == _components.length - 1
+                                        ? null
+                                        : () =>
+                                            _moveBoxsetMovie(
+                                              index,
+                                              1,
+                                            ),
+                                icon: const Icon(
+                                  Icons.arrow_downward_rounded,
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Entfernen',
+                                onPressed: () =>
+                                    _removeBoxsetMovie(index),
+                                icon: const Icon(
+                                  Icons.close_rounded,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              if (_components.isNotEmpty)
+                OutlinedButton.icon(
+                  onPressed: _addBoxsetMovie,
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text(
+                    'Weiteren Film hinzufügen',
+                  ),
+                ),
+            ],
             const SizedBox(height: 22),
             _SectionTitle(
               _wishlist
                   ? 'Wunschdetails'
-                  : 'Deine Ausgabe',
+                  : isBoxSet
+                      ? 'Dein Boxset'
+                      : 'Deine Ausgabe',
             ),
             const SizedBox(height: 10),
             DropdownButtonFormField<String>(

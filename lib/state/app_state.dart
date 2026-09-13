@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 
 import '../models/collection_item.dart';
 import '../models/physical_release.dart';
+import '../models/release_component.dart';
 import '../services/database_service.dart';
 import '../services/settings_service.dart';
 
@@ -19,6 +20,7 @@ class AppState extends ChangeNotifier {
 
   List<CollectionItem> _items = const [];
   List<PhysicalRelease> _physicalReleases = const [];
+  Map<int, List<ReleaseComponent>> _componentsByRelease = const {};
   String _tmdbToken = '';
   String _language = 'de-DE';
   String _region = 'DE';
@@ -58,6 +60,18 @@ class AppState extends ChangeNotifier {
   Future<void> _reloadLocalData() async {
     _items = await _database.getAll();
     _physicalReleases = await _database.getPhysicalReleases();
+
+    final allComponents =
+        await _database.getAllReleaseComponents();
+    final grouped = <int, List<ReleaseComponent>>{};
+
+    for (final component in allComponents) {
+      grouped
+          .putIfAbsent(component.releaseId, () => [])
+          .add(component);
+    }
+
+    _componentsByRelease = grouped;
   }
 
   Future<void> refresh() async {
@@ -70,6 +84,7 @@ class AppState extends ChangeNotifier {
     if (normalized.isEmpty) return null;
 
     for (final release in _physicalReleases) {
+      if (!release.hasScannableEan) continue;
       if (PhysicalRelease.normalizeBarcode(release.ean) == normalized) {
         return release;
       }
@@ -77,22 +92,58 @@ class AppState extends ChangeNotifier {
     return null;
   }
 
+  List<ReleaseComponent> componentsForRelease(int releaseId) {
+    return List.unmodifiable(
+      _componentsByRelease[releaseId] ?? const [],
+    );
+  }
+
   Future<CollectionItem> _attachRememberedRelease(
     CollectionItem item,
   ) async {
     final normalized = PhysicalRelease.normalizeBarcode(item.ean);
-    if (normalized.isEmpty) return item;
+    final isBoxSet = item.mediaFormat == 'Boxset';
 
-    final release = await _database.upsertPhysicalRelease(
+    if (normalized.isEmpty && !isBoxSet && item.releaseId == null) {
+      return item;
+    }
+
+    String storageEan = normalized;
+
+    if (storageEan.isEmpty && isBoxSet) {
+      if (item.releaseId != null) {
+        final existing = _physicalReleases.where(
+          (release) => release.id == item.releaseId,
+        );
+        if (existing.isNotEmpty) {
+          storageEan = existing.first.ean;
+        }
+      }
+
+      if (storageEan.isEmpty) {
+        storageEan =
+            'LOCALBOX-${DateTime.now().microsecondsSinceEpoch}';
+      }
+    } else if (storageEan.isEmpty && item.releaseId != null) {
+      final existing = _physicalReleases.where(
+        (release) => release.id == item.releaseId,
+      );
+      if (existing.isNotEmpty) {
+        storageEan = existing.first.ean;
+      }
+    }
+
+    final release = await _database.savePhysicalRelease(
       PhysicalRelease.fromCollectionItem(
         item.copyWith(ean: normalized),
         region: _region,
+        storageEan: storageEan,
       ),
     );
 
     return item.copyWith(
       releaseId: release.id,
-      ean: release.ean,
+      ean: normalized,
     );
   }
 
@@ -106,11 +157,27 @@ class AppState extends ChangeNotifier {
     return saved;
   }
 
-  Future<void> updateItem(CollectionItem item) async {
+  Future<CollectionItem> updateItem(CollectionItem item) async {
     final prepared = await _attachRememberedRelease(
       item.copyWith(updatedAt: DateTime.now()),
     );
     await _database.update(prepared);
+    await refresh();
+
+    for (final current in _items) {
+      if (current.id == prepared.id) return current;
+    }
+    return prepared;
+  }
+
+  Future<void> replaceReleaseComponents(
+    int releaseId,
+    List<ReleaseComponent> components,
+  ) async {
+    await _database.replaceReleaseComponents(
+      releaseId,
+      components,
+    );
     await refresh();
   }
 
@@ -126,8 +193,11 @@ class AppState extends ChangeNotifier {
     required String region,
   }) async {
     _tmdbToken = token.trim();
-    _language = language.trim().isEmpty ? 'de-DE' : language.trim();
-    _region = region.trim().isEmpty ? 'DE' : region.trim().toUpperCase();
+    _language =
+        language.trim().isEmpty ? 'de-DE' : language.trim();
+    _region = region.trim().isEmpty
+        ? 'DE'
+        : region.trim().toUpperCase();
 
     await _settings.setTmdbToken(_tmdbToken);
     await _settings.setLanguage(_language);
@@ -136,13 +206,19 @@ class AppState extends ChangeNotifier {
   }
 
   String createBackupJson() {
+    final components = _componentsByRelease.values
+        .expand((entries) => entries)
+        .map((component) => component.toDbMap())
+        .toList();
+
     return const JsonEncoder.withIndent('  ').convert({
       'app': 'ReelShelf',
-      'version': 2,
+      'version': 3,
       'exportedAt': DateTime.now().toIso8601String(),
       'items': _items.map((item) => item.toJson()).toList(),
       'physicalReleases':
           _physicalReleases.map((release) => release.toJson()).toList(),
+      'releaseComponents': components,
     });
   }
 
@@ -150,17 +226,24 @@ class AppState extends ChangeNotifier {
     final decoded = jsonDecode(rawJson);
     final List<dynamic> rawItems;
     final List<dynamic> rawReleases;
+    final List<dynamic> rawComponents;
 
     if (decoded is Map<String, dynamic> && decoded['items'] is List) {
       rawItems = decoded['items'] as List<dynamic>;
       rawReleases = decoded['physicalReleases'] is List
           ? decoded['physicalReleases'] as List<dynamic>
           : const [];
+      rawComponents = decoded['releaseComponents'] is List
+          ? decoded['releaseComponents'] as List<dynamic>
+          : const [];
     } else if (decoded is List) {
       rawItems = decoded;
       rawReleases = const [];
+      rawComponents = const [];
     } else {
-      throw const FormatException('Das Backup enthält keine Filmliste.');
+      throw const FormatException(
+        'Das Backup enthält keine Filmliste.',
+      );
     }
 
     final parsedItems = rawItems
@@ -181,7 +264,7 @@ class AppState extends ChangeNotifier {
           for (final mapEntry in entry.entries) {
             normalized[mapEntry.key.toString()] = mapEntry.value;
           }
-          return PhysicalRelease.fromJson(normalized).copyWith(id: null);
+          return PhysicalRelease.fromJson(normalized);
         })
         .where((release) => release.ean.trim().isNotEmpty)
         .toList();
@@ -189,12 +272,66 @@ class AppState extends ChangeNotifier {
     await _database.clear();
     await _database.clearPhysicalReleases();
 
+    final oldToNewReleaseId = <int, int>{};
+
     for (final release in parsedReleases) {
-      await _database.upsertPhysicalRelease(release);
+      final saved = await _database.savePhysicalRelease(
+        release.copyWith(id: null),
+      );
+      if (release.id != null && saved.id != null) {
+        oldToNewReleaseId[release.id!] = saved.id!;
+      }
+    }
+
+    if (rawComponents.isNotEmpty) {
+      final grouped = <int, List<ReleaseComponent>>{};
+
+      for (final entry in rawComponents.whereType<Map>()) {
+        final normalized = <String, Object?>{};
+        for (final mapEntry in entry.entries) {
+          normalized[mapEntry.key.toString()] = mapEntry.value;
+        }
+
+        final oldReleaseId =
+            (normalized['release_id'] as num?)?.toInt();
+        if (oldReleaseId == null) continue;
+
+        final newReleaseId =
+            oldToNewReleaseId[oldReleaseId];
+        if (newReleaseId == null) continue;
+
+        final component =
+            ReleaseComponent.fromDbMap(normalized).copyWith(
+          id: null,
+          releaseId: newReleaseId,
+        );
+
+        grouped
+            .putIfAbsent(newReleaseId, () => [])
+            .add(component);
+      }
+
+      for (final entry in grouped.entries) {
+        await _database.replaceReleaseComponents(
+          entry.key,
+          entry.value,
+        );
+      }
     }
 
     for (final item in parsedItems) {
-      final prepared = await _attachRememberedRelease(item);
+      final rememberedReleaseId = item.releaseId == null
+          ? null
+          : oldToNewReleaseId[item.releaseId!];
+
+      final restored = item.copyWith(
+        releaseId: rememberedReleaseId,
+      );
+
+      final prepared = rememberedReleaseId != null
+          ? restored
+          : await _attachRememberedRelease(restored);
+
       await _database.insert(prepared);
     }
 

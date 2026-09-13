@@ -3,6 +3,7 @@ import 'package:sqflite/sqflite.dart';
 
 import '../models/collection_item.dart';
 import '../models/physical_release.dart';
+import '../models/release_component.dart';
 
 class DatabaseService {
   Database? _database;
@@ -15,7 +16,7 @@ class DatabaseService {
 
     _database = await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -74,6 +75,13 @@ class DatabaseService {
             )
             WHERE TRIM(ean) <> ''
           ''');
+        } else if (oldVersion < 3) {
+          await db.execute(
+            'ALTER TABLE release_components ADD COLUMN year INTEGER',
+          );
+          await db.execute(
+            'ALTER TABLE release_components ADD COLUMN poster_path TEXT',
+          );
         }
       },
     );
@@ -113,6 +121,8 @@ class DatabaseService {
         release_id INTEGER NOT NULL,
         tmdb_id INTEGER,
         title TEXT NOT NULL,
+        year INTEGER,
+        poster_path TEXT,
         sequence_number INTEGER,
         FOREIGN KEY (release_id)
           REFERENCES physical_releases(id)
@@ -246,22 +256,57 @@ class DatabaseService {
     return PhysicalRelease.fromDbMap(rows.first);
   }
 
-  Future<PhysicalRelease> upsertPhysicalRelease(
+  Future<PhysicalRelease?> getPhysicalReleaseById(int id) async {
+    final db = await database;
+    final rows = await db.query(
+      'physical_releases',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+
+    if (rows.isEmpty) return null;
+    return PhysicalRelease.fromDbMap(rows.first);
+  }
+
+  Future<PhysicalRelease> savePhysicalRelease(
     PhysicalRelease release,
   ) async {
-    final normalized = PhysicalRelease.normalizeBarcode(release.ean);
-    if (normalized.isEmpty) {
-      throw ArgumentError('A physical release needs a barcode.');
+    final db = await database;
+    final now = DateTime.now();
+
+    if (release.id != null) {
+      final existing = await getPhysicalReleaseById(release.id!);
+      if (existing != null) {
+        final updated = release.copyWith(
+          createdAt: existing.createdAt,
+          updatedAt: now,
+        );
+        final map = updated.toDbMap()..remove('id');
+
+        await db.update(
+          'physical_releases',
+          map,
+          where: 'id = ?',
+          whereArgs: [release.id],
+        );
+        return updated;
+      }
     }
 
-    final db = await database;
+    final normalized = release.ean.startsWith('LOCALBOX-')
+        ? release.ean
+        : PhysicalRelease.normalizeBarcode(release.ean);
+
+    if (normalized.isEmpty) {
+      throw ArgumentError('A physical release needs a storage key.');
+    }
+
     final existing = await findPhysicalReleaseByEan(normalized);
-    final now = DateTime.now();
 
     if (existing == null) {
       final insertable = release.copyWith(
         ean: normalized,
-        createdAt: release.createdAt,
         updatedAt: now,
       );
       final map = insertable.toDbMap()..remove('id');
@@ -305,6 +350,40 @@ class DatabaseService {
       whereArgs: [existing.id],
     );
     return updated;
+  }
+
+  Future<List<ReleaseComponent>> getAllReleaseComponents() async {
+    final db = await database;
+    final rows = await db.query(
+      'release_components',
+      orderBy: 'release_id ASC, sequence_number ASC, id ASC',
+    );
+    return rows.map(ReleaseComponent.fromDbMap).toList();
+  }
+
+  Future<void> replaceReleaseComponents(
+    int releaseId,
+    List<ReleaseComponent> components,
+  ) async {
+    final db = await database;
+
+    await db.transaction((txn) async {
+      await txn.delete(
+        'release_components',
+        where: 'release_id = ?',
+        whereArgs: [releaseId],
+      );
+
+      for (var index = 0; index < components.length; index++) {
+        final component = components[index].copyWith(
+          id: null,
+          releaseId: releaseId,
+          sequenceNumber: index,
+        );
+        final map = component.toDbMap()..remove('id');
+        await txn.insert('release_components', map);
+      }
+    });
   }
 
   Future<void> clearPhysicalReleases() async {

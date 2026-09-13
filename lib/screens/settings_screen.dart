@@ -626,7 +626,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const ListTile(
                   leading: Icon(Icons.movie_filter_rounded),
                   title: Text(
-                    'ReelShelf 0.4.1',
+                    'ReelShelf 0.4.2',
                     style: TextStyle(fontWeight: FontWeight.w800),
                   ),
                   subtitle: Text(
@@ -652,7 +652,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     style: TextStyle(fontWeight: FontWeight.w700),
                   ),
                   subtitle: Text(
-                    'EAN-Zuordnungen werden von ReelShelf auf deinem Gerät gespeichert. UPCitemdb wird nicht mehr abgefragt.',
+                    'EAN-Zuordnungen und Boxset-Inhalte werden von ReelShelf auf deinem Gerät gespeichert. UPCitemdb wird nicht mehr abgefragt.',
                   ),
                 ),
                 const Divider(height: 1),
@@ -666,7 +666,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onTap: () => showLicensePage(
                     context: context,
                     applicationName: 'ReelShelf',
-                    applicationVersion: '0.4.1',
+                    applicationVersion: '0.4.2',
                   ),
                 ),
               ],

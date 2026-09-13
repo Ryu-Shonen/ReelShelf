@@ -33,6 +33,11 @@ class PhysicalRelease {
 
   bool get isBoxSet => releaseType == 'boxset';
 
+  bool get hasScannableEan =>
+      ean.isNotEmpty && !ean.startsWith('LOCALBOX-');
+
+  String get displayEan => hasScannableEan ? ean : '';
+
   static String normalizeBarcode(String value) {
     return value
         .trim()
@@ -75,11 +80,12 @@ class PhysicalRelease {
   factory PhysicalRelease.fromCollectionItem(
     CollectionItem item, {
     String region = 'DE',
+    String? storageEan,
   }) {
     final now = DateTime.now();
     return PhysicalRelease(
       id: item.releaseId,
-      ean: normalizeBarcode(item.ean),
+      ean: storageEan ?? normalizeBarcode(item.ean),
       tmdbId: item.tmdbId,
       title: item.title,
       mediaFormat: item.mediaFormat,
@@ -99,7 +105,7 @@ class PhysicalRelease {
       releaseId: id,
       tmdbId: tmdbId ?? item.tmdbId,
       title: item.title.trim().isEmpty ? title : item.title,
-      ean: ean,
+      ean: displayEan.isNotEmpty ? displayEan : item.ean,
       mediaFormat: mediaFormat,
       edition: edition,
       wishlist: wishlist,
@@ -109,7 +115,7 @@ class PhysicalRelease {
   Map<String, Object?> toDbMap() {
     return {
       if (id != null) 'id': id,
-      'ean': normalizeBarcode(ean),
+      'ean': ean,
       'tmdb_id': tmdbId,
       'title': title,
       'media_format': mediaFormat,
