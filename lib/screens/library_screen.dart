@@ -178,6 +178,11 @@ class _LibraryViewState extends State<LibraryView> {
                 ),
               ),
               const Spacer(),
+              CollectionViewModeToggle(
+                value: _viewMode,
+                onChanged: _setViewMode,
+              ),
+              const SizedBox(width: 2),
               PopupMenuButton<String>(
                 tooltip: 'Sortieren',
                 initialValue: _sort,
@@ -201,25 +206,20 @@ class _LibraryViewState extends State<LibraryView> {
                   padding: const EdgeInsets.all(7),
                   child: Row(
                     children: [
-                      const Icon(
-                        Icons.swap_vert_rounded,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 4),
                       Text(
                         _sort,
                         style: const TextStyle(
                           fontWeight: FontWeight.w700,
                         ),
                       ),
+                      const SizedBox(width: 3),
+                      const Icon(
+                        Icons.arrow_drop_down_rounded,
+                        size: 20,
+                      ),
                     ],
                   ),
                 ),
-              ),
-              const SizedBox(width: 6),
-              CollectionViewModeToggle(
-                value: _viewMode,
-                onChanged: _setViewMode,
               ),
             ],
           ),
