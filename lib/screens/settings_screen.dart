@@ -730,7 +730,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const ListTile(
                   leading: Icon(Icons.movie_filter_rounded),
                   title: Text(
-                    'Unstreamed 0.4.8',
+                    'Unstreamed 0.4.9',
                     style: TextStyle(fontWeight: FontWeight.w800),
                   ),
                   subtitle: Text(
@@ -746,6 +746,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   subtitle: Text(
                     'This product uses the TMDB API but is not endorsed or certified by TMDB.',
+                  ),
+                ),
+                const Divider(height: 1),
+                const ListTile(
+                  leading: Icon(Icons.document_scanner_outlined),
+                  title: Text(
+                    'Cover-Erkennung mit ML Kit',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  subtitle: Text(
+                    'Der Text auf dem fotografierten Cover wird auf dem Gerät erkannt. Danach wird nur der erkannte Suchtext für die TMDB-Suche verwendet.',
                   ),
                 ),
                 const Divider(height: 1),
@@ -770,7 +781,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onTap: () => showLicensePage(
                     context: context,
                     applicationName: 'Unstreamed',
-                    applicationVersion: '0.4.6',
+                    applicationVersion: '0.4.9',
                   ),
                 ),
               ],

@@ -1,24 +1,25 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../models/collection_item.dart';
-import '../models/physical_release.dart';
 import '../models/tmdb_movie.dart';
+import '../services/cover_scan_service.dart';
 import '../services/tmdb_service.dart';
 import '../state/app_state.dart';
 import '../widgets/movie_poster.dart';
-import 'barcode_scanner_screen.dart';
 import 'edit_item_screen.dart';
 import 'settings_screen.dart';
 
 class AddMovieScreen extends StatefulWidget {
   const AddMovieScreen({
     super.key,
-    this.initialBarcode,
     this.initialWishlist = false,
+    this.autoScanCover = false,
   });
 
-  final String? initialBarcode;
   final bool initialWishlist;
+  final bool autoScanCover;
 
   @override
   State<AddMovieScreen> createState() => _AddMovieScreenState();
@@ -26,27 +27,26 @@ class AddMovieScreen extends StatefulWidget {
 
 class _AddMovieScreenState extends State<AddMovieScreen> {
   final _searchController = TextEditingController();
+  final _coverScanService = CoverScanService();
 
   List<TmdbMovie> _results = const [];
   bool _loading = false;
   bool _imdbLoading = false;
-  bool _releaseLoading = false;
+  bool _coverScanning = false;
   String? _error;
-  String? _releaseMessage;
-  String? _barcode;
-  PhysicalRelease? _cachedRelease;
+  String? _coverImagePath;
+  String? _coverSummary;
   late bool _wishlist;
   int _searchSerial = 0;
 
   @override
   void initState() {
     super.initState();
-    _barcode = widget.initialBarcode;
     _wishlist = widget.initialWishlist;
 
-    if (_barcode?.trim().isNotEmpty == true) {
+    if (widget.autoScanCover) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _lookupLocalRelease(_barcode!);
+        if (mounted) _scanCover();
       });
     }
   }
@@ -64,11 +64,12 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
       );
 
   Future<void> _search() async {
+    final query = _searchController.text.trim();
+    if (query.isEmpty) return;
+
     final serial = ++_searchSerial;
     FocusScope.of(context).unfocus();
     final state = AppStateScope.of(context);
-
-    if (_searchController.text.trim().isEmpty) return;
 
     setState(() {
       _loading = true;
@@ -77,54 +78,214 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
     });
 
     try {
-      final result =
-          await _service(state).searchMovies(_searchController.text);
-      if (!mounted) return;
+      final result = await _service(state).searchMovies(query);
+      if (!mounted || serial != _searchSerial) return;
 
-      setState(() {
-        _results = result;
-        _loading = false;
-        _imdbLoading = result.isNotEmpty;
-      });
-
-      if (result.isEmpty) return;
-
-      try {
-        final enriched =
-            await state.enrichMoviesWithImdbRatings(result);
-        if (!mounted || serial != _searchSerial) return;
-        setState(() => _results = enriched);
-      } catch (_) {
-        // TMDB search results stay usable even if IMDb is unavailable.
-      } finally {
-        if (mounted) {
-          setState(() => _imdbLoading = false);
-        }
-      }
+      await _showResultsWithImdb(
+        result,
+        serial: serial,
+      );
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || serial != _searchSerial) return;
       setState(() => _error = error.toString());
     } finally {
-      if (mounted && _loading) {
+      if (mounted && serial == _searchSerial && _loading) {
         setState(() => _loading = false);
       }
     }
   }
 
-  CollectionItem _applyReleaseData(CollectionItem item) {
-    final release = _cachedRelease;
+  Future<void> _scanCover() async {
+    final state = AppStateScope.of(context);
 
-    if (release != null) {
-      return release.applyTo(
-        item.copyWith(ean: _barcode ?? release.ean),
-        wishlist: _wishlist,
-      );
+    if (state.tmdbToken.trim().isEmpty) {
+      setState(() {
+        _error =
+            'Bitte zuerst den TMDB Read Access Token in den Einstellungen einrichten.';
+      });
+      return;
     }
 
-    return item.copyWith(
-      ean: _barcode ?? item.ean,
-      wishlist: _wishlist,
+    FocusScope.of(context).unfocus();
+
+    setState(() {
+      _coverScanning = true;
+      _loading = false;
+      _imdbLoading = false;
+      _error = null;
+      _results = const [];
+    });
+
+    try {
+      final scan = await _coverScanService.scanCover();
+      if (!mounted) return;
+
+      if (scan == null) {
+        setState(() => _coverScanning = false);
+        return;
+      }
+
+      if (scan.searchQueries.isEmpty) {
+        setState(() {
+          _coverScanning = false;
+          _coverImagePath = scan.imagePath;
+          _coverSummary = scan.summary;
+          _error =
+              'Auf dem Cover wurde kein geeigneter Filmtitel erkannt. Versuche das Cover möglichst gerade und ohne Spiegelung zu fotografieren.';
+        });
+        return;
+      }
+
+      final serial = ++_searchSerial;
+
+      setState(() {
+        _coverImagePath = scan.imagePath;
+        _coverSummary = scan.summary;
+        _searchController.text = scan.searchQueries.first;
+        _coverScanning = false;
+        _loading = true;
+      });
+
+      final service = _service(state);
+      final moviesById = <int, TmdbMovie>{};
+
+      for (final query in scan.searchQueries.take(4)) {
+        try {
+          final matches = await service.searchMovies(query);
+          for (final movie in matches.take(8)) {
+            moviesById.putIfAbsent(movie.id, () => movie);
+          }
+        } catch (_) {
+          // Try the remaining OCR candidates.
+        }
+      }
+
+      if (!mounted || serial != _searchSerial) return;
+
+      final ranked = moviesById.values.toList()
+        ..sort(
+          (a, b) => _coverMatchScore(
+            b,
+            scan.rawText,
+          ).compareTo(
+            _coverMatchScore(a, scan.rawText),
+          ),
+        );
+
+      final result = ranked.take(12).toList(growable: false);
+
+      if (result.isEmpty) {
+        setState(() {
+          _loading = false;
+          _error =
+              'Der Text wurde erkannt, aber TMDB hat keinen passenden Film gefunden. Du kannst den erkannten Suchtext oben anpassen.';
+        });
+        return;
+      }
+
+      await _showResultsWithImdb(
+        result,
+        serial: serial,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _coverScanning = false;
+        _loading = false;
+        _error =
+            'Cover konnte nicht erkannt werden: $error';
+      });
+    }
+  }
+
+  double _coverMatchScore(
+    TmdbMovie movie,
+    String rawText,
+  ) {
+    final haystack = _normalize(rawText);
+    final title = _normalize(movie.title);
+    final originalTitle = _normalize(
+      movie.originalTitle ?? '',
     );
+
+    var score = 0.0;
+
+    if (title.isNotEmpty && haystack.contains(title)) {
+      score += 120;
+    }
+
+    if (originalTitle.isNotEmpty &&
+        haystack.contains(originalTitle)) {
+      score += 90;
+    }
+
+    final titleTokens = title
+        .split(' ')
+        .where((token) => token.length >= 2)
+        .toSet();
+
+    if (titleTokens.isNotEmpty) {
+      final matched = titleTokens
+          .where((token) => haystack.contains(token))
+          .length;
+
+      score +=
+          (matched / titleTokens.length) * 80;
+    }
+
+    final year = movie.year;
+    if (year != null && haystack.contains('$year')) {
+      score += 20;
+    }
+
+    score += (movie.voteAverage ?? 0) * 0.15;
+
+    return score;
+  }
+
+  String _normalize(String value) {
+    return value
+        .toLowerCase()
+        .replaceAll('ä', 'a')
+        .replaceAll('ö', 'o')
+        .replaceAll('ü', 'u')
+        .replaceAll('ß', 'ss')
+        .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+  }
+
+  Future<void> _showResultsWithImdb(
+    List<TmdbMovie> result, {
+    required int serial,
+  }) async {
+    if (!mounted || serial != _searchSerial) return;
+
+    setState(() {
+      _results = result;
+      _loading = false;
+      _imdbLoading = result.isNotEmpty;
+    });
+
+    if (result.isEmpty) {
+      setState(() => _imdbLoading = false);
+      return;
+    }
+
+    final state = AppStateScope.of(context);
+
+    try {
+      final enriched =
+          await state.enrichMoviesWithImdbRatings(result);
+      if (!mounted || serial != _searchSerial) return;
+      setState(() => _results = enriched);
+    } catch (_) {
+      // TMDB results stay usable even when IMDb is unavailable.
+    } finally {
+      if (mounted && serial == _searchSerial) {
+        setState(() => _imdbLoading = false);
+      }
+    }
   }
 
   Future<void> _selectMovie(TmdbMovie movie) async {
@@ -132,63 +293,12 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
     setState(() => _loading = true);
 
     try {
-      final details = await _service(state).getMovieDetails(movie.id);
-      if (!mounted) return;
-
-      var ratedDetails = details;
-      try {
-        final enriched =
-            await state.enrichMoviesWithImdbRatings([details]);
-        if (enriched.isNotEmpty) {
-          ratedDetails = enriched.first;
-        }
-      } catch (_) {
-        // Adding the film must still work if IMDb is temporarily unavailable.
-      }
-
-      final base =
-          ratedDetails.toCollectionItem(ean: _barcode ?? '');
-      final item = _applyReleaseData(base);
-
-      await Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => EditItemScreen(
-            item: item,
-            isNew: true,
-          ),
-        ),
-      );
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _error = error.toString());
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _useCachedRelease() async {
-    final release = _cachedRelease;
-    if (release == null) return;
-
-    final state = AppStateScope.of(context);
-    final configured = state.tmdbToken.trim().isNotEmpty;
-
-    if (release.tmdbId == null || !configured) {
-      await _manual();
-      return;
-    }
-
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-
-    try {
       final details =
-          await _service(state).getMovieDetails(release.tmdbId!);
+          await _service(state).getMovieDetails(movie.id);
       if (!mounted) return;
 
       var ratedDetails = details;
+
       try {
         final enriched =
             await state.enrichMoviesWithImdbRatings([details]);
@@ -196,13 +306,12 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
           ratedDetails = enriched.first;
         }
       } catch (_) {
-        // Cached physical releases remain usable without IMDb.
+        // Adding the film must still work without IMDb.
       }
 
-      final item = release.applyTo(
-        ratedDetails.toCollectionItem(ean: release.ean),
-        wishlist: _wishlist,
-      );
+      final item = ratedDetails
+          .toCollectionItem()
+          .copyWith(wishlist: _wishlist);
 
       await Navigator.of(context).pushReplacement(
         MaterialPageRoute(
@@ -222,19 +331,14 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
 
   Future<void> _manual({bool boxSet = false}) async {
     final now = DateTime.now();
-    final release = _cachedRelease;
 
     await Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (_) => EditItemScreen(
           item: CollectionItem(
-            releaseId: release?.id,
-            tmdbId: release?.tmdbId,
-            title: release?.title ?? '',
-            ean: _barcode ?? release?.ean ?? '',
+            title: '',
             wishlist: _wishlist,
-            mediaFormat: boxSet ? 'Boxset' : (release?.mediaFormat ?? 'Blu-ray'),
-            edition: release?.edition ?? '',
+            mediaFormat: boxSet ? 'Boxset' : 'Blu-ray',
             createdAt: now,
             updatedAt: now,
           ),
@@ -242,67 +346,6 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
         ),
       ),
     );
-  }
-
-  Future<void> _scan() async {
-    final result = await Navigator.of(context).push<String>(
-      MaterialPageRoute(
-        builder: (_) => const BarcodeScannerScreen(),
-      ),
-    );
-
-    if (!mounted || result == null || result.trim().isEmpty) return;
-
-    final normalized = PhysicalRelease.normalizeBarcode(result);
-    setState(() {
-      _barcode = normalized;
-      _cachedRelease = null;
-      _releaseMessage = null;
-      _results = const [];
-    });
-
-    await _lookupLocalRelease(normalized);
-  }
-
-  Future<void> _lookupLocalRelease(String barcode) async {
-    final value = PhysicalRelease.normalizeBarcode(barcode);
-    if (value.isEmpty) return;
-
-    setState(() {
-      _releaseLoading = true;
-      _releaseMessage = null;
-    });
-
-    final state = AppStateScope.of(context);
-    final release = state.findReleaseByEan(value);
-
-    if (!mounted) return;
-
-    setState(() {
-      _barcode = value;
-      _cachedRelease = release;
-
-      if (release == null) {
-        _releaseMessage =
-            'EAN erkannt. Diese Ausgabe kennt Unstreamed noch nicht. Ordne unten den Film zu; beim Speichern merkt sich Unstreamed diese EAN dauerhaft lokal.';
-      } else {
-        _releaseMessage =
-            'Lokaler Treffer – dafür wurde keine externe Produktdatenbank abgefragt.';
-        if (_searchController.text.trim().isEmpty) {
-          _searchController.text = release.title;
-        }
-      }
-
-      _releaseLoading = false;
-    });
-  }
-
-  void _clearBarcode() {
-    setState(() {
-      _cachedRelease = null;
-      _releaseMessage = null;
-      _barcode = null;
-    });
   }
 
   @override
@@ -343,40 +386,50 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
                 ),
                 const SizedBox(height: 18),
                 Text(
-                  'Physische Ausgabe',
+                  'Cover erkennen',
                   style: Theme.of(context)
                       .textTheme
                       .titleMedium
                       ?.copyWith(fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 9),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.tonalIcon(
-                    onPressed: _releaseLoading ? null : _scan,
-                    icon: const Icon(Icons.qr_code_scanner_rounded),
-                    label: const Text('Barcode scannen'),
+                FilledButton.tonalIcon(
+                  onPressed: configured &&
+                          !_coverScanning &&
+                          !_loading
+                      ? _scanCover
+                      : null,
+                  icon: _coverScanning
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Icon(
+                          Icons.photo_camera_rounded,
+                        ),
+                  label: Text(
+                    _coverScanning
+                        ? 'Cover wird analysiert …'
+                        : 'Filmcover scannen',
                   ),
                 ),
-                if (_releaseLoading) ...[
-                  const SizedBox(height: 10),
-                  const LinearProgressIndicator(minHeight: 2),
-                ],
-                if (_cachedRelease != null) ...[
-                  const SizedBox(height: 10),
-                  _LocalReleaseCard(
-                    release: _cachedRelease!,
-                    message: _releaseMessage,
-                    onUse: _loading ? null : _useCachedRelease,
-                    onClear: _clearBarcode,
+                const SizedBox(height: 7),
+                Text(
+                  'Fotografiere die Vorderseite möglichst gerade, scharf und ohne starke Spiegelung. Unstreamed liest den Titel lokal aus dem Foto und sucht passende Filme bei TMDB.',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.5),
+                    fontSize: 12.5,
+                    height: 1.4,
                   ),
-                ] else if (_barcode?.isNotEmpty == true ||
-                    _releaseMessage != null) ...[
-                  const SizedBox(height: 10),
-                  _BarcodeStatusCard(
-                    barcode: _barcode,
-                    message: _releaseMessage,
-                    onClear: _clearBarcode,
+                ),
+                if (_coverImagePath != null) ...[
+                  const SizedBox(height: 12),
+                  _CoverScanCard(
+                    imagePath: _coverImagePath!,
+                    summary: _coverSummary,
+                    onRescan: _coverScanning ? null : _scanCover,
                   ),
                 ],
                 const SizedBox(height: 18),
@@ -390,7 +443,8 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
                 const SizedBox(height: 9),
                 TextField(
                   controller: _searchController,
-                  enabled: configured && !_loading,
+                  enabled:
+                      configured && !_loading && !_coverScanning,
                   textInputAction: TextInputAction.search,
                   onSubmitted: (_) => _search(),
                   decoration: InputDecoration(
@@ -399,9 +453,14 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
                         : 'TMDB-Token zuerst einrichten',
                     prefixIcon: const Icon(Icons.movie_outlined),
                     suffixIcon: IconButton(
-                      onPressed:
-                          configured && !_loading ? _search : null,
-                      icon: const Icon(Icons.arrow_forward_rounded),
+                      onPressed: configured &&
+                              !_loading &&
+                              !_coverScanning
+                          ? _search
+                          : null,
+                      icon: const Icon(
+                        Icons.arrow_forward_rounded,
+                      ),
                     ),
                   ),
                 ),
@@ -419,7 +478,8 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
                       Text(
                         'IMDb-Bewertungen werden ergänzt …',
                         style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.5),
+                          color:
+                              Colors.white.withValues(alpha: 0.5),
                           fontSize: 12.5,
                         ),
                       ),
@@ -432,20 +492,25 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
                     Expanded(
                       child: OutlinedButton.icon(
                         onPressed: () => _manual(),
-                        icon: const Icon(Icons.edit_note_rounded),
+                        icon:
+                            const Icon(Icons.edit_note_rounded),
                         label: Text(
                           _wishlist
                               ? 'Wunsch manuell'
-                              : 'Ausgabe manuell',
+                              : 'Film manuell',
                         ),
                       ),
                     ),
                     const SizedBox(width: 9),
                     Expanded(
                       child: OutlinedButton.icon(
-                        onPressed: () => _manual(boxSet: true),
-                        icon: const Icon(Icons.all_inbox_rounded),
-                        label: const Text('Boxset anlegen'),
+                        onPressed: () =>
+                            _manual(boxSet: true),
+                        icon: const Icon(
+                          Icons.all_inbox_rounded,
+                        ),
+                        label:
+                            const Text('Boxset anlegen'),
                       ),
                     ),
                   ],
@@ -468,9 +533,10 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
                           ),
                           const SizedBox(height: 7),
                           Text(
-                            'Für Cover, Laufzeit und Beschreibung benötigt Unstreamed einen kostenlosen TMDB Read Access Token.',
+                            'Für Cover-Erkennung und automatische Filmdaten benötigt Unstreamed einen kostenlosen TMDB Read Access Token.',
                             style: TextStyle(
-                              color: Colors.white.withValues(
+                              color:
+                                  Colors.white.withValues(
                                 alpha: 0.62,
                               ),
                             ),
@@ -497,8 +563,9 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
                   const SizedBox(height: 10),
                   Text(
                     _error!,
-                    style:
-                        const TextStyle(color: Colors.redAccent),
+                    style: const TextStyle(
+                      color: Colors.redAccent,
+                    ),
                   ),
                 ],
               ],
@@ -513,23 +580,24 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
                       padding: const EdgeInsets.all(28),
                       child: Text(
                         configured
-                            ? _barcode?.isNotEmpty == true
-                                ? 'Wähle den passenden Film. Beim Speichern wird die EAN mit dieser physischen Ausgabe lokal verknüpft.'
-                                : 'Scanne zuerst eine Ausgabe oder suche direkt einen Film bei TMDB.'
-                            : 'Du kannst Filme bereits manuell erfassen. Für automatische Filmdaten richtest du einmalig TMDB ein.',
+                            ? 'Scanne das Frontcover oder suche den Film direkt bei TMDB.'
+                            : 'Du kannst Filme manuell erfassen. Für Cover-Erkennung und automatische Filmdaten richtest du einmalig TMDB ein.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          color: Colors.white.withValues(
-                            alpha: 0.5,
-                          ),
+                          color:
+                              Colors.white.withValues(alpha: 0.5),
                           height: 1.45,
                         ),
                       ),
                     ),
                   )
                 : ListView.separated(
-                    padding:
-                        const EdgeInsets.fromLTRB(16, 8, 16, 28),
+                    padding: const EdgeInsets.fromLTRB(
+                      16,
+                      8,
+                      16,
+                      28,
+                    ),
                     itemCount: _results.length,
                     separatorBuilder: (_, __) =>
                         const SizedBox(height: 10),
@@ -580,15 +648,19 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
                                         const SizedBox(height: 4),
                                         Text(
                                           [
-                                            movie.year?.toString() ??
+                                            movie.year
+                                                    ?.toString() ??
                                                 'Jahr unbekannt',
-                                            if (movie.voteAverage != null)
+                                            if (movie.voteAverage !=
+                                                null)
                                               'TMDB ${movie.voteAverage!.toStringAsFixed(1)}',
-                                            if (movie.imdbRating != null)
+                                            if (movie.imdbRating !=
+                                                null)
                                               'IMDb ${movie.imdbRating!.toStringAsFixed(1)}',
                                           ].join(' · '),
                                           maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
+                                          overflow:
+                                              TextOverflow.ellipsis,
                                           style: TextStyle(
                                             color: Colors.white
                                                 .withValues(
@@ -642,152 +714,63 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
   }
 }
 
-class _LocalReleaseCard extends StatelessWidget {
-  const _LocalReleaseCard({
-    required this.release,
-    required this.message,
-    required this.onUse,
-    required this.onClear,
+class _CoverScanCard extends StatelessWidget {
+  const _CoverScanCard({
+    required this.imagePath,
+    required this.summary,
+    required this.onRescan,
   });
 
-  final PhysicalRelease release;
-  final String? message;
-  final VoidCallback? onUse;
-  final VoidCallback onClear;
+  final String imagePath;
+  final String? summary;
+  final VoidCallback? onRescan;
 
   @override
   Widget build(BuildContext context) {
     return Card(
+      clipBehavior: Clip.antiAlias,
       child: Padding(
-        padding: const EdgeInsets.all(13),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(
-                  Icons.offline_pin_rounded,
-                  color: Color(0xFFFF6B7A),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment:
-                        CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Lokal gespeichert',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                      const SizedBox(height: 5),
-                      Text(
-                        release.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      if (release.edition.isNotEmpty) ...[
-                        const SizedBox(height: 3),
-                        Text(
-                          release.edition,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: Colors.white.withValues(
-                              alpha: 0.55,
-                            ),
-                            fontSize: 12.5,
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 7,
-                        runSpacing: 7,
-                        children: [
-                          _MiniChip(release.mediaFormat),
-                          _MiniChip('EAN ${release.ean}'),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Barcode entfernen',
-                  onPressed: onClear,
-                  icon: const Icon(Icons.close_rounded),
-                ),
-              ],
-            ),
-            if (message != null) ...[
-              const SizedBox(height: 10),
-              Text(
-                message!,
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.52),
-                  fontSize: 12.5,
-                  height: 1.35,
-                ),
-              ),
-            ],
-            const SizedBox(height: 11),
-            FilledButton.tonalIcon(
-              onPressed: onUse,
-              icon: const Icon(Icons.arrow_forward_rounded),
-              label: const Text('Lokalen Treffer verwenden'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _BarcodeStatusCard extends StatelessWidget {
-  const _BarcodeStatusCard({
-    required this.barcode,
-    required this.message,
-    required this.onClear,
-  });
-
-  final String? barcode;
-  final String? message;
-  final VoidCallback onClear;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(13),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(Icons.qr_code_2_rounded, size: 21),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (barcode?.isNotEmpty == true)
-                  Text(
-                    'EAN $barcode',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w800,
+            ClipRRect(
+              borderRadius: BorderRadius.circular(9),
+              child: SizedBox(
+                width: 64,
+                height: 92,
+                child: Image.file(
+                  File(imagePath),
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) =>
+                      const ColoredBox(
+                    color: Color(0xFF171920),
+                    child: Icon(
+                      Icons.image_not_supported_outlined,
                     ),
                   ),
-                if (message != null) ...[
-                  if (barcode?.isNotEmpty == true)
-                    const SizedBox(height: 4),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Cover analysiert',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
                   Text(
-                    message!,
+                    summary?.trim().isNotEmpty == true
+                        ? summary!
+                        : 'Text erkannt und mit TMDB abgeglichen.',
+                    maxLines: 4,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color:
                           Colors.white.withValues(alpha: 0.58),
@@ -795,40 +778,21 @@ class _BarcodeStatusCard extends StatelessWidget {
                       height: 1.35,
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    onPressed: onRescan,
+                    icon: const Icon(
+                      Icons.refresh_rounded,
+                      size: 17,
+                    ),
+                    label: const Text(
+                      'Nochmal scannen',
+                    ),
+                  ),
                 ],
-              ],
+              ),
             ),
-          ),
-          IconButton(
-            visualDensity: VisualDensity.compact,
-            onPressed: onClear,
-            icon: const Icon(Icons.close_rounded, size: 19),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MiniChip extends StatelessWidget {
-  const _MiniChip(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.07),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        text,
-        style: const TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
+          ],
         ),
       ),
     );

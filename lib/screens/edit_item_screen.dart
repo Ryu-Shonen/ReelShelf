@@ -5,7 +5,6 @@ import '../models/physical_release.dart';
 import '../models/release_component.dart';
 import '../state/app_state.dart';
 import '../widgets/movie_poster.dart';
-import 'barcode_scanner_screen.dart';
 import 'boxset_movie_picker_screen.dart';
 
 class EditItemScreen extends StatefulWidget {
@@ -94,50 +93,6 @@ class _EditItemScreenState extends State<EditItemScreen> {
     _location.dispose();
     _notes.dispose();
     super.dispose();
-  }
-
-  Future<void> _scanBarcode() async {
-    final result = await Navigator.of(context).push<String>(
-      MaterialPageRoute(
-        builder: (_) => const BarcodeScannerScreen(),
-      ),
-    );
-    if (!mounted || result == null) return;
-
-    final normalized = PhysicalRelease.normalizeBarcode(result);
-    _ean.text = normalized;
-
-    final cached =
-        AppStateScope.of(context).findReleaseByEan(normalized);
-    if (cached == null) return;
-
-    setState(() {
-      if (_title.text.trim().isEmpty) {
-        _title.text = cached.title;
-      }
-      if (_edition.text.trim().isEmpty) {
-        _edition.text = cached.edition;
-      }
-      _format = CollectionItem.mediaFormats
-              .contains(cached.mediaFormat)
-          ? cached.mediaFormat
-          : _format;
-
-      if (cached.id != null) {
-        _components = AppStateScope.of(context)
-            .componentsForRelease(cached.id!)
-            .map((component) => component.copyWith())
-            .toList();
-      }
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Lokale EAN-Zuordnung gefunden und übernommen.',
-        ),
-      ),
-    );
   }
 
   Future<void> _addBoxsetMovie() async {
@@ -481,16 +436,9 @@ class _EditItemScreenState extends State<EditItemScreen> {
                 labelText: 'EAN / Barcode',
                 helperText: isBoxSet
                     ? 'Optional. Boxsets ohne EAN bleiben trotzdem lokal speicherbar.'
-                    : 'Wird beim Speichern lokal mit dieser Ausgabe verknüpft.',
+                    : 'Optional. Kann bei Bedarf manuell eingetragen werden.',
                 prefixIcon:
                     const Icon(Icons.qr_code_2_rounded),
-                suffixIcon: IconButton(
-                  tooltip: 'Scannen',
-                  onPressed: _scanBarcode,
-                  icon: const Icon(
-                    Icons.qr_code_scanner_rounded,
-                  ),
-                ),
               ),
             ),
             if (isBoxSet) ...[

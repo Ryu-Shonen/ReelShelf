@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../state/app_state.dart';
 import 'add_movie_screen.dart';
-import 'barcode_scanner_screen.dart';
 import 'library_screen.dart';
 import 'settings_screen.dart';
 import 'stats_screen.dart';
@@ -19,35 +18,31 @@ class _ShellScreenState extends State<ShellScreen> {
   int _index = 0;
 
   Future<void> _openAdd({
-    String? barcode,
     bool wishlist = false,
+    bool autoScanCover = false,
   }) async {
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => AddMovieScreen(
-          initialBarcode: barcode,
           initialWishlist: wishlist,
+          autoScanCover: autoScanCover,
         ),
       ),
     );
   }
 
-  Future<void> _openCollectionAdd({String? barcode}) {
-    return _openAdd(barcode: barcode, wishlist: false);
+  Future<void> _openCollectionAdd() {
+    return _openAdd(wishlist: false);
   }
 
-  Future<void> _openWishlistAdd({String? barcode}) {
-    return _openAdd(barcode: barcode, wishlist: true);
+  Future<void> _openWishlistAdd() {
+    return _openAdd(wishlist: true);
   }
 
-  Future<void> _scanBarcode() async {
-    final code = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => const BarcodeScannerScreen()),
-    );
-    if (!mounted || code == null || code.isEmpty) return;
-    await _openAdd(
-      barcode: code,
+  Future<void> _scanCover() {
+    return _openAdd(
       wishlist: _index == 1,
+      autoScanCover: true,
     );
   }
 
@@ -68,9 +63,9 @@ class _ShellScreenState extends State<ShellScreen> {
             ),
           if (_index != 2)
             IconButton(
-              tooltip: 'Barcode scannen',
-              onPressed: _scanBarcode,
-              icon: const Icon(Icons.qr_code_scanner_rounded),
+              tooltip: 'Filmcover scannen',
+              onPressed: _scanCover,
+              icon: const Icon(Icons.photo_camera_rounded),
             ),
           IconButton(
             tooltip: 'Einstellungen',

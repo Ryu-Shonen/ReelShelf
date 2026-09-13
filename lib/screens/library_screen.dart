@@ -16,7 +16,7 @@ class LibraryView extends StatefulWidget {
     required this.onAdd,
   });
 
-  final Future<void> Function({String? barcode}) onAdd;
+  final Future<void> Function() onAdd;
 
   @override
   State<LibraryView> createState() => _LibraryViewState();
