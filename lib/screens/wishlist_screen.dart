@@ -184,13 +184,7 @@ class _WishlistItemsView extends StatelessWidget {
       case CollectionViewMode.compactSquare:
         return LayoutBuilder(
           builder: (context, constraints) {
-            final columns = constraints.maxWidth >= 900
-                ? 8
-                : constraints.maxWidth >= 650
-                    ? 6
-                    : constraints.maxWidth >= 430
-                        ? 4
-                        : 3;
+            const columns = 2;
 
             return GridView.builder(
               padding:

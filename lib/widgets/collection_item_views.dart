@@ -168,11 +168,14 @@ class CollectionListRow extends StatelessWidget {
               ),
               const SizedBox(width: 13),
               Expanded(
-                child: SizedBox(
-                  height: 106,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    minHeight: 106,
+                  ),
                   child: Column(
                     crossAxisAlignment:
                         CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Row(
                         crossAxisAlignment:
@@ -216,10 +219,10 @@ class CollectionListRow extends StatelessWidget {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 7),
+                      const SizedBox(height: 8),
                       Wrap(
                         spacing: 6,
-                        runSpacing: 5,
+                        runSpacing: 6,
                         children: [
                           _InfoChip(item.mediaFormat),
                           if (item.edition.isNotEmpty)
@@ -235,7 +238,7 @@ class CollectionListRow extends StatelessWidget {
                             ),
                         ],
                       ),
-                      const Spacer(),
+                      const SizedBox(height: 9),
                       Text(
                         item.wishlist
                             ? 'Wunschliste · ${item.condition}'
@@ -256,26 +259,26 @@ class CollectionListRow extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 4),
-              SizedBox(
-                height: 106,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    if (onPurchased != null)
-                      IconButton(
-                        tooltip: 'Gekauft – abhaken',
-                        onPressed: onPurchased,
-                        icon: const Icon(
-                          Icons.check_circle_outline_rounded,
-                          color: Color(0xFF7AD9A5),
-                        ),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (onPurchased != null)
+                    IconButton(
+                      tooltip: 'Gekauft – abhaken',
+                      onPressed: onPurchased,
+                      icon: const Icon(
+                        Icons.check_circle_outline_rounded,
+                        color: Color(0xFF7AD9A5),
                       ),
-                    const Icon(
+                    ),
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: Icon(
                       Icons.chevron_right_rounded,
                       size: 22,
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -390,19 +393,25 @@ class _InfoChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final availableWidth =
+        MediaQuery.sizeOf(context).width * 0.52;
+
     return Container(
-      constraints: const BoxConstraints(maxWidth: 150),
+      constraints: BoxConstraints(
+        maxWidth: availableWidth,
+      ),
       padding:
-          const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(
         color: highlighted
             ? const Color(0xFFF5C518).withValues(alpha: 0.12)
             : Colors.white.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
         text,
-        maxLines: 1,
+        maxLines: 2,
+        softWrap: true,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
           fontSize: 10.5,
