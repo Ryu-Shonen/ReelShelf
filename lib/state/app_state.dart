@@ -1,26 +1,38 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/widgets.dart';
 
 import '../models/collection_item.dart';
+import '../models/imdb_rating.dart';
+import '../models/tmdb_movie.dart';
 import '../models/physical_release.dart';
 import '../models/release_component.dart';
 import '../services/database_service.dart';
+import '../services/imdb_ratings_service.dart';
 import '../services/settings_service.dart';
+import '../services/tmdb_service.dart';
 
 class AppState extends ChangeNotifier {
   AppState({
     DatabaseService? databaseService,
     SettingsService? settingsService,
+    ImdbRatingsService? imdbRatingsService,
   })  : _database = databaseService ?? DatabaseService(),
-        _settings = settingsService ?? SettingsService();
+        _settings = settingsService ?? SettingsService(),
+        _imdbRatingsService =
+            imdbRatingsService ?? ImdbRatingsService();
 
   final DatabaseService _database;
   final SettingsService _settings;
+  final ImdbRatingsService _imdbRatingsService;
 
   List<CollectionItem> _items = const [];
   List<PhysicalRelease> _physicalReleases = const [];
   Map<int, List<ReleaseComponent>> _componentsByRelease = const {};
+  Map<int, ImdbRating> _imdbRatingsByTmdbId = const {};
+  bool _imdbBusy = false;
+  String? _imdbMessage;
   String _tmdbToken = '';
   String _language = 'de-DE';
   String _region = 'DE';
@@ -36,6 +48,11 @@ class AppState extends ChangeNotifier {
   String get region => _region;
   bool get initialized => _initialized;
   bool get busy => _busy;
+  bool get imdbBusy => _imdbBusy;
+  String? get imdbMessage => _imdbMessage;
+  int get imdbRatingCount => _imdbRatingsByTmdbId.values
+      .where((entry) => entry.hasRating)
+      .length;
 
   List<CollectionItem> get ownedItems =>
       _items.where((item) => !item.wishlist).toList(growable: false);
@@ -55,6 +72,10 @@ class AppState extends ChangeNotifier {
     _busy = false;
     _initialized = true;
     notifyListeners();
+
+    if (_tmdbToken.trim().isNotEmpty) {
+      unawaited(refreshImdbForCollection());
+    }
   }
 
   Future<void> _reloadLocalData() async {
@@ -72,11 +93,108 @@ class AppState extends ChangeNotifier {
     }
 
     _componentsByRelease = grouped;
+    _imdbRatingsByTmdbId =
+        await _database.getAllImdbRatings();
   }
 
   Future<void> refresh() async {
     await _reloadLocalData();
     notifyListeners();
+  }
+
+  ImdbRating? imdbRatingForTmdbId(int? tmdbId) {
+    if (tmdbId == null) return null;
+    return _imdbRatingsByTmdbId[tmdbId];
+  }
+
+  Future<List<TmdbMovie>> enrichMoviesWithImdbRatings(
+    List<TmdbMovie> movies, {
+    bool forceDatasetRefresh = false,
+  }) async {
+    if (movies.isEmpty) return const [];
+
+    final service = TmdbService(
+      token: _tmdbToken,
+      language: _language,
+      region: _region,
+    );
+
+    final enriched = await _imdbRatingsService.enrichMovies(
+      movies: movies,
+      tmdbService: service,
+      database: _database,
+      forceDatasetRefresh: forceDatasetRefresh,
+    );
+
+    final refreshed =
+        await _database.getImdbRatingsForTmdbIds(
+      movies.map((movie) => movie.id),
+    );
+
+    _imdbRatingsByTmdbId = {
+      ..._imdbRatingsByTmdbId,
+      ...refreshed,
+    };
+    notifyListeners();
+
+    return enriched;
+  }
+
+  Future<void> refreshImdbForCollection({
+    bool forceDatasetRefresh = false,
+  }) async {
+    if (_imdbBusy || _tmdbToken.trim().isEmpty) return;
+
+    final targets = <int, TmdbMovie>{};
+
+    for (final item in _items) {
+      final tmdbId = item.tmdbId;
+      if (tmdbId == null) continue;
+
+      targets[tmdbId] = TmdbMovie(
+        id: tmdbId,
+        title: item.title,
+      );
+    }
+
+    for (final components in _componentsByRelease.values) {
+      for (final component in components) {
+        final tmdbId = component.tmdbId;
+        if (tmdbId == null) continue;
+
+        targets.putIfAbsent(
+          tmdbId,
+          () => TmdbMovie(
+            id: tmdbId,
+            title: component.title,
+          ),
+        );
+      }
+    }
+
+    if (targets.isEmpty) return;
+
+    _imdbBusy = true;
+    _imdbMessage = forceDatasetRefresh
+        ? 'IMDb-Bewertungen werden aktualisiert …'
+        : 'IMDb-Bewertungen werden geladen …';
+    notifyListeners();
+
+    try {
+      await enrichMoviesWithImdbRatings(
+        targets.values.toList(),
+        forceDatasetRefresh: forceDatasetRefresh,
+      );
+
+      _imdbMessage =
+          'IMDb-Bewertungen sind aktuell.';
+    } catch (error) {
+      _imdbMessage =
+          'IMDb-Bewertungen konnten nicht aktualisiert werden: $error';
+    } finally {
+      _imdbBusy = false;
+      notifyListeners();
+    }
   }
 
   PhysicalRelease? findReleaseByEan(String barcode) {

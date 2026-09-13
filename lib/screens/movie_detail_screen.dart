@@ -89,6 +89,14 @@ class MovieDetailScreen extends StatelessWidget {
         ? const <ReleaseComponent>[]
         : state.componentsForRelease(item.releaseId!);
 
+    final imdb =
+        state.imdbRatingForTmdbId(item.tmdbId);
+    final hasAnyImdbRating = imdb?.rating != null ||
+        components.any(
+          (component) =>
+              state.imdbRatingForTmdbId(component.tmdbId)?.rating != null,
+        );
+
     final isBoxSet =
         item.mediaFormat == 'Boxset' || components.isNotEmpty;
     final fallbackPoster =
@@ -208,8 +216,14 @@ class MovieDetailScreen extends StatelessWidget {
                         ),
                       if (item.voteAverage != null)
                         _Pill(
-                          text: item.voteAverage!
-                              .toStringAsFixed(1),
+                          text:
+                              'TMDB ${item.voteAverage!.toStringAsFixed(1)}',
+                          icon: Icons.star_outline_rounded,
+                        ),
+                      if (imdb?.rating != null)
+                        _Pill(
+                          text:
+                              'IMDb ${imdb!.rating!.toStringAsFixed(1)}',
                           icon: Icons.star_rounded,
                         ),
                     ],
@@ -242,6 +256,17 @@ class MovieDetailScreen extends StatelessWidget {
                         ),
                         fontSize: 15,
                         height: 1.55,
+                      ),
+                    ),
+                  ],
+                  if (hasAnyImdbRating) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      'Information courtesy of IMDb (https://www.imdb.com). Used with permission.',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.36),
+                        fontSize: 10.5,
+                        height: 1.35,
                       ),
                     ),
                   ],
@@ -288,38 +313,54 @@ class MovieDetailScreen extends StatelessWidget {
                       )
                     else
                       ...components.map(
-                        (component) => Padding(
-                          padding:
-                              const EdgeInsets.only(bottom: 9),
-                          child: Card(
-                            child: ListTile(
-                              leading: SizedBox(
-                                width: 44,
-                                height: 66,
-                                child: MoviePoster(
-                                  url: component.posterUrl,
-                                  borderRadius: 7,
+                        (component) {
+                          final componentImdb =
+                              state.imdbRatingForTmdbId(
+                            component.tmdbId,
+                          );
+
+                          return Padding(
+                            padding:
+                                const EdgeInsets.only(bottom: 9),
+                            child: Card(
+                              child: ListTile(
+                                leading: SizedBox(
+                                  width: 44,
+                                  height: 66,
+                                  child: MoviePoster(
+                                    url: component.posterUrl,
+                                    borderRadius: 7,
+                                  ),
                                 ),
-                              ),
-                              title: Text(
-                                component.title,
-                                maxLines: 2,
-                                overflow:
-                                    TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontWeight:
-                                      FontWeight.w700,
+                                title: Text(
+                                  component.title,
+                                  maxLines: 2,
+                                  overflow:
+                                      TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontWeight:
+                                        FontWeight.w700,
+                                  ),
                                 ),
-                              ),
-                              subtitle: component.year == null
-                                  ? null
-                                  : Text('${component.year}'),
-                              trailing: const Icon(
-                                Icons.movie_outlined,
+                                subtitle: component.year == null
+                                    ? null
+                                    : Text('${component.year}'),
+                                trailing:
+                                    componentImdb?.rating == null
+                                        ? const Icon(
+                                            Icons.movie_outlined,
+                                          )
+                                        : Text(
+                                            'IMDb ${componentImdb!.rating!.toStringAsFixed(1)}',
+                                            style: const TextStyle(
+                                              fontWeight:
+                                                  FontWeight.w800,
+                                            ),
+                                          ),
                               ),
                             ),
-                          ),
-                        ),
+                          );
+                        },
                       ),
                   ],
                   const SizedBox(height: 28),

@@ -29,12 +29,14 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
 
   List<TmdbMovie> _results = const [];
   bool _loading = false;
+  bool _imdbLoading = false;
   bool _releaseLoading = false;
   String? _error;
   String? _releaseMessage;
   String? _barcode;
   PhysicalRelease? _cachedRelease;
   late bool _wishlist;
+  int _searchSerial = 0;
 
   @override
   void initState() {
@@ -62,6 +64,7 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
       );
 
   Future<void> _search() async {
+    final serial = ++_searchSerial;
     FocusScope.of(context).unfocus();
     final state = AppStateScope.of(context);
 
@@ -69,6 +72,7 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
 
     setState(() {
       _loading = true;
+      _imdbLoading = false;
       _error = null;
     });
 
@@ -76,12 +80,34 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
       final result =
           await _service(state).searchMovies(_searchController.text);
       if (!mounted) return;
-      setState(() => _results = result);
+
+      setState(() {
+        _results = result;
+        _loading = false;
+        _imdbLoading = result.isNotEmpty;
+      });
+
+      if (result.isEmpty) return;
+
+      try {
+        final enriched =
+            await state.enrichMoviesWithImdbRatings(result);
+        if (!mounted || serial != _searchSerial) return;
+        setState(() => _results = enriched);
+      } catch (_) {
+        // TMDB search results stay usable even if IMDb is unavailable.
+      } finally {
+        if (mounted) {
+          setState(() => _imdbLoading = false);
+        }
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() => _error = error.toString());
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && _loading) {
+        setState(() => _loading = false);
+      }
     }
   }
 
@@ -109,7 +135,19 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
       final details = await _service(state).getMovieDetails(movie.id);
       if (!mounted) return;
 
-      final base = details.toCollectionItem(ean: _barcode ?? '');
+      var ratedDetails = details;
+      try {
+        final enriched =
+            await state.enrichMoviesWithImdbRatings([details]);
+        if (enriched.isNotEmpty) {
+          ratedDetails = enriched.first;
+        }
+      } catch (_) {
+        // Adding the film must still work if IMDb is temporarily unavailable.
+      }
+
+      final base =
+          ratedDetails.toCollectionItem(ean: _barcode ?? '');
       final item = _applyReleaseData(base);
 
       await Navigator.of(context).pushReplacement(
@@ -150,8 +188,19 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
           await _service(state).getMovieDetails(release.tmdbId!);
       if (!mounted) return;
 
+      var ratedDetails = details;
+      try {
+        final enriched =
+            await state.enrichMoviesWithImdbRatings([details]);
+        if (enriched.isNotEmpty) {
+          ratedDetails = enriched.first;
+        }
+      } catch (_) {
+        // Cached physical releases remain usable without IMDb.
+      }
+
       final item = release.applyTo(
-        details.toCollectionItem(ean: release.ean),
+        ratedDetails.toCollectionItem(ean: release.ean),
         wishlist: _wishlist,
       );
 
@@ -356,6 +405,27 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
                     ),
                   ),
                 ),
+                if (_imdbLoading) ...[
+                  const SizedBox(height: 9),
+                  Row(
+                    children: [
+                      const SizedBox.square(
+                        dimension: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                        ),
+                      ),
+                      const SizedBox(width: 9),
+                      Text(
+                        'IMDb-Bewertungen werden ergänzt …',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.5),
+                          fontSize: 12.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 10),
                 Row(
                   children: [
@@ -509,8 +579,16 @@ class _AddMovieScreenState extends State<AddMovieScreen> {
                                         ),
                                         const SizedBox(height: 4),
                                         Text(
-                                          movie.year?.toString() ??
-                                              'Jahr unbekannt',
+                                          [
+                                            movie.year?.toString() ??
+                                                'Jahr unbekannt',
+                                            if (movie.voteAverage != null)
+                                              'TMDB ${movie.voteAverage!.toStringAsFixed(1)}',
+                                            if (movie.imdbRating != null)
+                                              'IMDb ${movie.imdbRating!.toStringAsFixed(1)}',
+                                          ].join(' · '),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
                                           style: TextStyle(
                                             color: Colors.white
                                                 .withValues(

@@ -254,6 +254,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _refreshImdbRatings() async {
+    final state = AppStateScope.of(context);
+
+    await state.refreshImdbForCollection(
+      forceDatasetRefresh: true,
+    );
+
+    if (!mounted) return;
+    final message =
+        state.imdbMessage ?? 'IMDb-Aktualisierung beendet.';
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
   Future<void> _clearCollection() async {
     final state = AppStateScope.of(context);
     final confirmed = await showDialog<bool>(
@@ -490,6 +506,94 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 24),
           Text(
+            'Bewertungen',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 10),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.star_rounded,
+                        color: Color(0xFFF5C518),
+                      ),
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: Text(
+                          'IMDb',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 18,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        '${state.imdbRatingCount} gespeichert',
+                        style: TextStyle(
+                          color:
+                              Colors.white.withValues(alpha: 0.48),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 9),
+                  Text(
+                    'ReelShelf lädt den offiziellen IMDb-Ratings-Datensatz direkt auf dein Gerät und speichert nur die Bewertungen deiner Filme lokal. Die Daten werden höchstens einmal pro 7 Tage automatisch erneuert.',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.62),
+                      height: 1.45,
+                    ),
+                  ),
+                  if (state.imdbMessage != null) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      state.imdbMessage!,
+                      style: TextStyle(
+                        color:
+                            Colors.white.withValues(alpha: 0.5),
+                        fontSize: 12.5,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  FilledButton.tonalIcon(
+                    onPressed:
+                        state.imdbBusy ? null : _refreshImdbRatings,
+                    icon: state.imdbBusy
+                        ? const SizedBox.square(
+                            dimension: 17,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Icon(Icons.refresh_rounded),
+                    label: Text(
+                      state.imdbBusy
+                          ? 'IMDb wird aktualisiert …'
+                          : 'IMDb-Bewertungen aktualisieren',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Nur für persönliche, nicht-kommerzielle Nutzung. Information courtesy of IMDb (https://www.imdb.com). Used with permission.',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.38),
+                      fontSize: 11,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
             'Lokale Ausgabendaten',
             style: Theme.of(context).textTheme.titleLarge,
           ),
@@ -626,7 +730,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const ListTile(
                   leading: Icon(Icons.movie_filter_rounded),
                   title: Text(
-                    'ReelShelf 0.4.2',
+                    'ReelShelf 0.4.3',
                     style: TextStyle(fontWeight: FontWeight.w800),
                   ),
                   subtitle: Text(
@@ -666,7 +770,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onTap: () => showLicensePage(
                     context: context,
                     applicationName: 'ReelShelf',
-                    applicationVersion: '0.4.2',
+                    applicationVersion: '0.4.3',
                   ),
                 ),
               ],

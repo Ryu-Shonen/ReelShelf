@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/collection_item.dart';
+import '../state/app_state.dart';
 import 'movie_poster.dart';
 
 class CollectionCard extends StatelessWidget {
@@ -15,6 +16,9 @@ class CollectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final imdb = AppStateScope.of(context)
+        .imdbRatingForTmdbId(item.tmdbId);
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(20),
@@ -26,7 +30,8 @@ class CollectionCard extends StatelessWidget {
               fit: StackFit.expand,
               children: [
                 Hero(
-                  tag: 'poster-${item.id ?? item.title.hashCode}',
+                  tag:
+                      'poster-${item.id ?? item.title.hashCode}',
                   child: MoviePoster(url: item.posterUrl),
                 ),
                 Positioned(
@@ -34,6 +39,15 @@ class CollectionCard extends StatelessWidget {
                   left: 9,
                   child: _Badge(label: item.mediaFormat),
                 ),
+                if (imdb?.rating != null)
+                  Positioned(
+                    bottom: 9,
+                    left: 9,
+                    child: _RatingBadge(
+                      label:
+                          'IMDb ${imdb!.rating!.toStringAsFixed(1)}',
+                    ),
+                  ),
                 if (item.favorite)
                   const Positioned(
                     top: 8,
@@ -80,11 +94,14 @@ class _Badge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      padding:
+          const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.72),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1),
+        ),
       ),
       child: Text(
         label,
@@ -93,6 +110,45 @@ class _Badge extends StatelessWidget {
           fontWeight: FontWeight.w800,
           letterSpacing: 0.2,
         ),
+      ),
+    );
+  }
+}
+
+class _RatingBadge extends StatelessWidget {
+  const _RatingBadge({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding:
+          const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.78),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.12),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.star_rounded,
+            size: 13,
+            color: Color(0xFFF5C518),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -110,7 +166,11 @@ class _FavoriteBadge extends StatelessWidget {
         color: Colors.black.withValues(alpha: 0.72),
         shape: BoxShape.circle,
       ),
-      child: const Icon(Icons.favorite_rounded, size: 17, color: Color(0xFFFF6B7A)),
+      child: const Icon(
+        Icons.favorite_rounded,
+        size: 17,
+        color: Color(0xFFFF6B7A),
+      ),
     );
   }
 }

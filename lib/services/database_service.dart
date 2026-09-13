@@ -2,6 +2,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
 import '../models/collection_item.dart';
+import '../models/imdb_rating.dart';
 import '../models/physical_release.dart';
 import '../models/release_component.dart';
 
@@ -16,12 +17,13 @@ class DatabaseService {
 
     _database = await openDatabase(
       path,
-      version: 3,
+      version: 4,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
       onCreate: (db, version) async {
         await _createReleaseTables(db);
+        await _createImdbRatingTable(db);
         await _createCollectionTable(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
@@ -83,6 +85,9 @@ class DatabaseService {
             'ALTER TABLE release_components ADD COLUMN poster_path TEXT',
           );
         }
+        if (oldVersion < 4) {
+          await _createImdbRatingTable(db);
+        }
       },
     );
 
@@ -132,6 +137,22 @@ class DatabaseService {
 
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_release_components_release ON release_components(release_id)',
+    );
+  }
+
+  Future<void> _createImdbRatingTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS imdb_rating_cache (
+        tmdb_id INTEGER PRIMARY KEY,
+        imdb_id TEXT NOT NULL DEFAULT '',
+        rating REAL,
+        vote_count INTEGER,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_imdb_rating_cache_imdb_id ON imdb_rating_cache(imdb_id)',
     );
   }
 
@@ -384,6 +405,72 @@ class DatabaseService {
         await txn.insert('release_components', map);
       }
     });
+  }
+
+  Future<Map<int, ImdbRating>> getAllImdbRatings() async {
+    final db = await database;
+    final rows = await db.query('imdb_rating_cache');
+
+    return {
+      for (final row in rows)
+        (row['tmdb_id'] as num).toInt():
+            ImdbRating.fromDbMap(row),
+    };
+  }
+
+  Future<Map<int, ImdbRating>> getImdbRatingsForTmdbIds(
+    Iterable<int> tmdbIds,
+  ) async {
+    final ids = tmdbIds.toSet().toList();
+    if (ids.isEmpty) return const {};
+
+    final db = await database;
+    final result = <int, ImdbRating>{};
+
+    for (var offset = 0; offset < ids.length; offset += 500) {
+      final end = offset + 500 < ids.length
+          ? offset + 500
+          : ids.length;
+      final chunk = ids.sublist(offset, end);
+      final placeholders =
+          List.filled(chunk.length, '?').join(',');
+
+      final rows = await db.query(
+        'imdb_rating_cache',
+        where: 'tmdb_id IN ($placeholders)',
+        whereArgs: chunk,
+      );
+
+      for (final row in rows) {
+        final rating = ImdbRating.fromDbMap(row);
+        result[rating.tmdbId] = rating;
+      }
+    }
+
+    return result;
+  }
+
+  Future<void> upsertImdbRatings(
+    Iterable<ImdbRating> ratings,
+  ) async {
+    final values = ratings.toList();
+    if (values.isEmpty) return;
+
+    final db = await database;
+    await db.transaction((txn) async {
+      for (final rating in values) {
+        await txn.insert(
+          'imdb_rating_cache',
+          rating.toDbMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    });
+  }
+
+  Future<void> clearImdbRatings() async {
+    final db = await database;
+    await db.delete('imdb_rating_cache');
   }
 
   Future<void> clearPhysicalReleases() async {

@@ -20,7 +20,9 @@ class _BoxsetMoviePickerScreenState
 
   List<TmdbMovie> _results = const [];
   bool _loading = false;
+  bool _imdbLoading = false;
   String? _error;
+  int _searchSerial = 0;
 
   @override
   void dispose() {
@@ -35,6 +37,7 @@ class _BoxsetMoviePickerScreenState
       );
 
   Future<void> _search() async {
+    final serial = ++_searchSerial;
     final query = _controller.text.trim();
     if (query.isEmpty) return;
 
@@ -43,6 +46,7 @@ class _BoxsetMoviePickerScreenState
 
     setState(() {
       _loading = true;
+      _imdbLoading = false;
       _error = null;
     });
 
@@ -50,12 +54,34 @@ class _BoxsetMoviePickerScreenState
       final results =
           await _service(state).searchMovies(query);
       if (!mounted) return;
-      setState(() => _results = results);
+
+      setState(() {
+        _results = results;
+        _loading = false;
+        _imdbLoading = results.isNotEmpty;
+      });
+
+      if (results.isEmpty) return;
+
+      try {
+        final enriched =
+            await state.enrichMoviesWithImdbRatings(results);
+        if (!mounted || serial != _searchSerial) return;
+        setState(() => _results = enriched);
+      } catch (_) {
+        // Search stays usable when IMDb is unavailable.
+      } finally {
+        if (mounted) {
+          setState(() => _imdbLoading = false);
+        }
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() => _error = error.toString());
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && _loading) {
+        setState(() => _loading = false);
+      }
     }
   }
 
@@ -103,6 +129,26 @@ class _BoxsetMoviePickerScreenState
           ),
           if (_loading)
             const LinearProgressIndicator(minHeight: 2),
+          if (_imdbLoading)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 6, 16, 4),
+              child: Row(
+                children: [
+                  const SizedBox.square(
+                    dimension: 13,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'IMDb-Bewertungen werden ergänzt …',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.5),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           if (_error != null)
             Padding(
               padding: const EdgeInsets.all(16),
@@ -172,8 +218,12 @@ class _BoxsetMoviePickerScreenState
                                       ),
                                       const SizedBox(height: 5),
                                       Text(
-                                        movie.year?.toString() ??
-                                            'Jahr unbekannt',
+                                        [
+                                          movie.year?.toString() ??
+                                              'Jahr unbekannt',
+                                          if (movie.imdbRating != null)
+                                            'IMDb ${movie.imdbRating!.toStringAsFixed(1)}',
+                                        ].join(' · '),
                                         style: TextStyle(
                                           color: Colors.white
                                               .withValues(alpha: 0.5),

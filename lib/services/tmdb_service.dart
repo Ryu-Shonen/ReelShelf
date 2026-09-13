@@ -61,11 +61,10 @@ class TmdbService {
     }
 
     final body = jsonDecode(response.body) as Map<String, dynamic>;
-    final results = (body['results'] as List<dynamic>? ?? const [])
+    return (body['results'] as List<dynamic>? ?? const [])
         .whereType<Map<String, dynamic>>()
         .map(TmdbMovie.fromJson)
         .toList();
-    return results;
   }
 
   Future<TmdbMovie> getMovieDetails(int id) async {
@@ -75,6 +74,7 @@ class TmdbService {
       '/3/movie/$id',
       {
         'language': language,
+        'append_to_response': 'external_ids',
       },
     );
 
@@ -88,5 +88,24 @@ class TmdbService {
     return TmdbMovie.fromJson(
       jsonDecode(response.body) as Map<String, dynamic>,
     );
+  }
+
+  Future<String?> getMovieImdbId(int id) async {
+    _ensureConfigured();
+    final uri = Uri.https(
+      'api.themoviedb.org',
+      '/3/movie/$id/external_ids',
+    );
+
+    final response = await http.get(uri, headers: _headers);
+    if (response.statusCode != 200) {
+      throw TmdbException(
+        'Externe Film-IDs konnten nicht geladen werden (${response.statusCode}).',
+      );
+    }
+
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final value = body['imdb_id']?.toString().trim() ?? '';
+    return value.isEmpty ? null : value;
   }
 }
