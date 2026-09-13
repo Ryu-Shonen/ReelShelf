@@ -35,6 +35,47 @@ class MovieDetailScreen extends StatelessWidget {
     );
   }
 
+  Future<void> _markPurchased(
+    BuildContext context,
+    CollectionItem item,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Als gekauft markieren?'),
+        content: Text(
+          '„${item.title}“ wird aus der Wunschliste entfernt und deiner Sammlung hinzugefügt.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(context, true),
+            icon: const Icon(Icons.check_rounded),
+            label: const Text('Abhaken'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
+    await AppStateScope.of(context)
+        .moveWishlistItemToCollection(item);
+
+    if (!context.mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Zur Sammlung hinzugefügt. Kaufpreis und Kaufdatum kannst du bei Bedarf über „Bearbeiten“ ergänzen.',
+        ),
+      ),
+    );
+  }
+
   Future<void> _delete(
     BuildContext context,
     CollectionItem item,
@@ -413,7 +454,9 @@ class MovieDetailScreen extends StatelessWidget {
                         ),
                         if (item.purchasePrice != null)
                           _InfoRow(
-                            label: 'Kaufpreis',
+                            label: item.wishlist
+                                ? 'Preisvorstellung'
+                                : 'Kaufpreis',
                             value:
                                 '${item.purchasePrice!.toStringAsFixed(2).replaceAll('.', ',')} €',
                             icon: Icons.euro_rounded,
@@ -459,9 +502,25 @@ class MovieDetailScreen extends StatelessWidget {
                     ),
                   ],
                   const SizedBox(height: 28),
+                  if (item.wishlist) ...[
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: () =>
+                            _markPurchased(context, item),
+                        icon: const Icon(
+                          Icons.check_circle_outline_rounded,
+                        ),
+                        label: const Text(
+                          'Gekauft – zur Sammlung hinzufügen',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
                   SizedBox(
                     width: double.infinity,
-                    child: FilledButton.icon(
+                    child: OutlinedButton.icon(
                       onPressed: () => _edit(context, item),
                       icon:
                           const Icon(Icons.edit_rounded),

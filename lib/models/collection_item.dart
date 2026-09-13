@@ -139,6 +139,37 @@ class CollectionItem {
     );
   }
 
+  CollectionItem asOwnedFromWishlist() {
+    return CollectionItem(
+      id: id,
+      releaseId: releaseId,
+      tmdbId: tmdbId,
+      title: title,
+      originalTitle: originalTitle,
+      year: year,
+      releaseDate: releaseDate,
+      posterPath: posterPath,
+      backdropPath: backdropPath,
+      overview: overview,
+      runtime: runtime,
+      genres: genres,
+      voteAverage: voteAverage,
+      originalLanguage: originalLanguage,
+      mediaFormat: mediaFormat,
+      edition: edition,
+      ean: ean,
+      purchasePrice: null,
+      purchaseDate: null,
+      condition: condition,
+      location: location,
+      notes: notes,
+      favorite: favorite,
+      wishlist: false,
+      createdAt: createdAt,
+      updatedAt: DateTime.now(),
+    );
+  }
+
   CollectionItem withoutId() {
     return CollectionItem(
       releaseId: releaseId,

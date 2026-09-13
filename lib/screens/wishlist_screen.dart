@@ -49,6 +49,53 @@ class _WishlistViewState extends State<WishlistView> {
     await _viewPreferences.setWishlistViewMode(mode);
   }
 
+  Future<void> _markPurchased(
+    CollectionItem item,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Als gekauft markieren?'),
+        content: Text(
+          '„${item.title}“ wird aus der Wunschliste entfernt und automatisch deiner Sammlung hinzugefügt.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(context, true),
+            icon: const Icon(Icons.check_rounded),
+            label: const Text('Abhaken'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final state = AppStateScope.of(context);
+    await state.moveWishlistItemToCollection(item);
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '„${item.title}“ wurde in die Sammlung verschoben.',
+        ),
+        action: SnackBarAction(
+          label: 'Rückgängig',
+          onPressed: () async {
+            await state.updateItem(item);
+          },
+        ),
+      ),
+    );
+  }
+
   void _openItem(
     BuildContext context,
     CollectionItem item,
@@ -108,6 +155,7 @@ class _WishlistViewState extends State<WishlistView> {
               items: items,
               onTap: (item) =>
                   _openItem(context, item),
+              onPurchased: _markPurchased,
             ),
           ),
         ),
@@ -122,11 +170,13 @@ class _WishlistItemsView extends StatelessWidget {
     required this.mode,
     required this.items,
     required this.onTap,
+    required this.onPurchased,
   });
 
   final CollectionViewMode mode;
   final List<CollectionItem> items;
   final ValueChanged<CollectionItem> onTap;
+  final ValueChanged<CollectionItem> onPurchased;
 
   @override
   Widget build(BuildContext context) {
@@ -158,6 +208,7 @@ class _WishlistItemsView extends StatelessWidget {
                 return CompactSquareCollectionCard(
                   item: item,
                   onTap: () => onTap(item),
+                  onPurchased: () => onPurchased(item),
                 );
               },
             );
@@ -191,6 +242,7 @@ class _WishlistItemsView extends StatelessWidget {
                 return CollectionCard(
                   item: item,
                   onTap: () => onTap(item),
+                  onPurchased: () => onPurchased(item),
                 );
               },
             );
@@ -209,6 +261,7 @@ class _WishlistItemsView extends StatelessWidget {
             return CollectionListRow(
               item: item,
               onTap: () => onTap(item),
+              onPurchased: () => onPurchased(item),
             );
           },
         );

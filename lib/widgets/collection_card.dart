@@ -9,10 +9,12 @@ class CollectionCard extends StatelessWidget {
     super.key,
     required this.item,
     required this.onTap,
+    this.onPurchased,
   });
 
   final CollectionItem item;
   final VoidCallback onTap;
+  final VoidCallback? onPurchased;
 
   @override
   Widget build(BuildContext context) {
@@ -55,6 +57,14 @@ class CollectionCard extends StatelessWidget {
                     child: _RatingBadge(
                       label:
                           'IMDb ${imdb!.rating!.toStringAsFixed(1)}',
+                    ),
+                  ),
+                if (onPurchased != null)
+                  Positioned(
+                    bottom: 8,
+                    right: 8,
+                    child: _PurchasedButton(
+                      onPressed: onPurchased!,
                     ),
                   ),
                 if (item.favorite)
@@ -158,6 +168,32 @@ class _RatingBadge extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _PurchasedButton extends StatelessWidget {
+  const _PurchasedButton({
+    required this.onPressed,
+  });
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.black.withValues(alpha: 0.76),
+      shape: const CircleBorder(),
+      child: IconButton(
+        tooltip: 'Gekauft – abhaken',
+        onPressed: onPressed,
+        visualDensity: VisualDensity.compact,
+        icon: const Icon(
+          Icons.check_rounded,
+          size: 19,
+          color: Color(0xFF7AD9A5),
+        ),
       ),
     );
   }

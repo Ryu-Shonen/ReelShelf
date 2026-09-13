@@ -9,10 +9,12 @@ class CompactSquareCollectionCard extends StatelessWidget {
     super.key,
     required this.item,
     required this.onTap,
+    this.onPurchased,
   });
 
   final CollectionItem item;
   final VoidCallback onTap;
+  final VoidCallback? onPurchased;
 
   @override
   Widget build(BuildContext context) {
@@ -58,9 +60,23 @@ class CompactSquareCollectionCard extends StatelessWidget {
                 text: item.mediaFormat,
               ),
             ),
-            if (item.favorite)
+            if (onPurchased != null)
+              Positioned(
+                top: 7,
+                right: 7,
+                child: _CompactPurchasedButton(
+                  onPressed: onPurchased!,
+                ),
+              )
+            else if (item.favorite)
               const Positioned(
                 top: 7,
+                right: 7,
+                child: _MiniFavorite(),
+              ),
+            if (onPurchased != null && item.favorite)
+              const Positioned(
+                top: 39,
                 right: 7,
                 child: _MiniFavorite(),
               ),
@@ -117,10 +133,12 @@ class CollectionListRow extends StatelessWidget {
     super.key,
     required this.item,
     required this.onTap,
+    this.onPurchased,
   });
 
   final CollectionItem item;
   final VoidCallback onTap;
+  final VoidCallback? onPurchased;
 
   @override
   Widget build(BuildContext context) {
@@ -238,13 +256,25 @@ class CollectionListRow extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 4),
-              const SizedBox(
+              SizedBox(
                 height: 106,
-                child: Center(
-                  child: Icon(
-                    Icons.chevron_right_rounded,
-                    size: 22,
-                  ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (onPurchased != null)
+                      IconButton(
+                        tooltip: 'Gekauft – abhaken',
+                        onPressed: onPurchased,
+                        icon: const Icon(
+                          Icons.check_circle_outline_rounded,
+                          color: Color(0xFF7AD9A5),
+                        ),
+                      ),
+                    const Icon(
+                      Icons.chevron_right_rounded,
+                      size: 22,
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -292,6 +322,36 @@ class _SmallBadge extends StatelessWidget {
         style: const TextStyle(
           fontSize: 9,
           fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+}
+
+class _CompactPurchasedButton extends StatelessWidget {
+  const _CompactPurchasedButton({
+    required this.onPressed,
+  });
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.black.withValues(alpha: 0.74),
+      shape: const CircleBorder(),
+      child: IconButton(
+        tooltip: 'Gekauft – abhaken',
+        onPressed: onPressed,
+        constraints: const BoxConstraints(
+          minWidth: 28,
+          minHeight: 28,
+        ),
+        padding: const EdgeInsets.all(4),
+        icon: const Icon(
+          Icons.check_rounded,
+          size: 17,
+          color: Color(0xFF7AD9A5),
         ),
       ),
     );

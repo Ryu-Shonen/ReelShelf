@@ -299,6 +299,13 @@ class AppState extends ChangeNotifier {
     await refresh();
   }
 
+  Future<CollectionItem> moveWishlistItemToCollection(
+    CollectionItem item,
+  ) async {
+    if (!item.wishlist) return item;
+    return updateItem(item.asOwnedFromWishlist());
+  }
+
   Future<void> deleteItem(CollectionItem item) async {
     if (item.id == null) return;
     await _database.delete(item.id!);
