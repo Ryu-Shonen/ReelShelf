@@ -31,6 +31,14 @@ android {
             // Installierbares Test-APK. Für den Play Store später durch einen eigenen
             // Release-Keystore ersetzen.
             signingConfig = signingConfigs.getByName("debug")
+
+            // Flutter's release build runs R8. The ML Kit Flutter wrapper references
+            // optional OCR language modules that we intentionally do not ship because
+            // Unstreamed only uses Latin text recognition.
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 }
