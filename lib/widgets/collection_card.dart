@@ -16,8 +16,17 @@ class CollectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final imdb = AppStateScope.of(context)
-        .imdbRatingForTmdbId(item.tmdbId);
+    final state = AppStateScope.of(context);
+    final imdb = state.imdbRatingForTmdbId(item.tmdbId);
+    final posterUrl = item.posterUrl ??
+        (item.releaseId == null
+            ? null
+            : state.componentsForRelease(item.releaseId!).isEmpty
+                ? null
+                : state
+                    .componentsForRelease(item.releaseId!)
+                    .first
+                    .posterUrl);
 
     return InkWell(
       onTap: onTap,
@@ -32,7 +41,7 @@ class CollectionCard extends StatelessWidget {
                 Hero(
                   tag:
                       'poster-${item.id ?? item.title.hashCode}',
-                  child: MoviePoster(url: item.posterUrl),
+                  child: MoviePoster(url: posterUrl),
                 ),
                 Positioned(
                   top: 9,
